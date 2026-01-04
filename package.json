@@ -23,7 +23,7 @@
     "video"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "CLI tool to identify fish species in diving videos using Google Gemini AI",
   "dependencies": {
     "@google/genai": "^1.34.0",
