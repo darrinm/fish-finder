@@ -46,6 +46,41 @@ export async function getVideoFiles(inputPath: string): Promise<string[]> {
   throw new Error(`Invalid path: ${inputPath}`);
 }
 
+export interface VideoMetadata {
+  path: string;
+  name: string;
+  size: number;       // bytes
+  duration: number;   // seconds
+}
+
+export async function getVideoMetadata(videoPath: string): Promise<VideoMetadata> {
+  const stats = await stat(videoPath);
+  let duration = 0;
+
+  try {
+    // Use ffprobe to get duration
+    const { stdout } = await execAsync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoPath}"`,
+      { timeout: 10000 }
+    );
+    duration = parseFloat(stdout.trim()) || 0;
+  } catch {
+    // ffprobe failed, duration will be 0
+  }
+
+  return {
+    path: videoPath,
+    name: basename(videoPath),
+    size: stats.size,
+    duration,
+  };
+}
+
+export async function getVideosWithMetadata(inputPath: string): Promise<VideoMetadata[]> {
+  const videos = await getVideoFiles(inputPath);
+  return Promise.all(videos.map(getVideoMetadata));
+}
+
 export async function extractFrame(
   videoPath: string,
   timestampSeconds: number,

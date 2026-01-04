@@ -197,13 +197,55 @@
       border-color: var(--success);
     }
 
-    .selected-file {
-      margin-top: 0.5rem;
+    .selected-videos {
+      margin-top: 0.75rem;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .selected-video-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: var(--bg-card);
+      border-radius: 4px;
+      margin-bottom: 0.25rem;
+    }
+
+    .selected-video-info {
+      flex: 1;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      overflow: hidden;
+    }
+
+    .selected-video-name {
       font-size: 0.875rem;
-      color: var(--text-secondary);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .selected-video-meta {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .selected-video-remove {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 0.25rem;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .selected-video-remove:hover {
+      color: var(--danger);
     }
 
     .video-preview {
@@ -217,7 +259,7 @@
       display: block;
     }
 
-    select, input[type="number"], input[type="text"].path-input {
+    select, input[type="number"] {
       width: 100%;
       padding: 0.5rem;
       background: var(--bg-card);
@@ -226,10 +268,6 @@
       color: var(--text-primary);
       font-size: 0.875rem;
       margin-bottom: 0.5rem;
-    }
-
-    .path-input {
-      font-family: monospace;
     }
 
     .checkbox-group {
@@ -492,6 +530,45 @@
       font-size: 0.875rem;
       color: var(--text-secondary);
       margin-bottom: 0.5rem;
+    }
+
+    /* Timing display */
+    .timing-section {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+    }
+
+    .timing-section h3 {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    .timing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .timing-item {
+      background: var(--bg-card);
+      padding: 0.75rem;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .timing-value {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .timing-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
     }
 
     /* Empty state */
@@ -786,35 +863,6 @@
       border-radius: 0 0 4px 4px;
     }
 
-    /* Already analyzed banner */
-    .already-analyzed {
-      background: rgba(251, 191, 36, 0.1);
-      border: 1px solid var(--warning);
-      color: var(--warning);
-      padding: 0.75rem 1rem;
-      border-radius: 6px;
-      margin-top: 0.5rem;
-      font-size: 0.875rem;
-      display: none;
-    }
-
-    .already-analyzed.visible {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .already-analyzed button {
-      background: var(--warning);
-      color: var(--bg-primary);
-      border: none;
-      padding: 0.25rem 0.75rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-
     /* Star button */
     .star-btn {
       position: absolute;
@@ -892,118 +940,6 @@
       display: block;
     }
 
-    /* Batch Analysis Styles */
-    .batch-section {
-      background: var(--bg-secondary);
-      padding: 1rem;
-      border-radius: 8px;
-      margin-bottom: 1.5rem;
-      display: none;
-    }
-
-    .batch-section.visible {
-      display: block;
-    }
-
-    .batch-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.75rem;
-    }
-
-    .batch-header h3 {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-    }
-
-    .batch-controls {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .batch-controls button {
-      padding: 0.5rem 1rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.875rem;
-    }
-
-    .batch-controls button:hover {
-      border-color: var(--accent);
-    }
-
-    .batch-controls button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .batch-controls button.primary {
-      background: var(--accent);
-      color: var(--bg-primary);
-      border-color: var(--accent);
-    }
-
-    .batch-controls button.primary:hover:not(:disabled) {
-      background: var(--accent-hover);
-    }
-
-    .batch-controls button.danger {
-      background: var(--error);
-      border-color: var(--error);
-    }
-
-    .video-checklist {
-      max-height: 200px;
-      overflow-y: auto;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      background: var(--bg-card);
-    }
-
-    .video-checkbox-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .video-checkbox-item:last-child {
-      border-bottom: none;
-    }
-
-    .video-checkbox-item:hover {
-      background: rgba(0, 212, 255, 0.05);
-    }
-
-    .video-checkbox-item input[type="checkbox"] {
-      cursor: pointer;
-    }
-
-    .video-checkbox-item label {
-      flex: 1;
-      cursor: pointer;
-      font-size: 0.875rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .video-checkbox-item.analyzed {
-      color: var(--text-secondary);
-    }
-
-    .video-checkbox-item.analyzed::after {
-      content: '✓';
-      color: var(--success);
-      margin-left: 0.5rem;
-    }
-
     /* Batch Progress */
     .batch-progress-section {
       background: var(--bg-secondary);
@@ -1073,12 +1009,25 @@
       text-align: center;
     }
 
-    .batch-video-name {
+    .batch-video-info {
       flex: 1;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      overflow: hidden;
+    }
+
+    .batch-video-name {
       font-size: 0.875rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .batch-video-meta {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
     }
 
     .batch-video-progress {
@@ -1100,6 +1049,14 @@
 
     .batch-video-item.failed .batch-video-status::before {
       content: '❌';
+    }
+
+    .batch-video-item.skipped .batch-video-status::before {
+      content: '⏭️';
+    }
+
+    .batch-video-item.skipped {
+      opacity: 0.6;
     }
 
     .batch-video-item.processing {
@@ -1146,21 +1103,14 @@
       <!-- Controls -->
       <div class="controls">
         <div class="control-group">
-          <h3>Video Selection</h3>
-          <input type="text" id="videoPathInput" class="path-input"
-                 placeholder="Enter video path or drag & drop"
-                 value="/Users/darrin/Pictures/HERO12 Black/">
+          <h3>Select Videos</h3>
           <div class="file-input-wrapper">
-            <input type="file" id="videoInput" class="file-input" accept="video/*">
+            <input type="file" id="videoInput" class="file-input" accept="video/*" multiple>
             <label for="videoInput" class="file-label" id="fileLabel">
-              Or click to browse
+              Click to browse videos
             </label>
           </div>
-          <div class="already-analyzed" id="alreadyAnalyzed">
-            <span>This video was already analyzed</span>
-            <button onclick="loadExistingAnalysis()">View Results</button>
-          </div>
-          <video id="videoPreview" class="video-preview" controls></video>
+          <div class="selected-videos" id="selectedVideos"></div>
         </div>
 
         <div class="control-group">
@@ -1182,7 +1132,7 @@
             <label for="extractFrames">Extract frames</label>
           </div>
           <button class="analyze-btn" id="analyzeBtn" disabled>
-            Analyze Video
+            Analyze
           </button>
         </div>
       </div>
@@ -1195,27 +1145,6 @@
         <div class="progress-text">
           <span id="progressMessage">Preparing...</span>
           <span id="progressPercent">0%</span>
-        </div>
-      </div>
-
-      <!-- Batch Video Selection -->
-      <div class="batch-section" id="batchSection">
-        <div class="batch-header">
-          <h3>Batch Analysis</h3>
-          <span id="batchSelectedCount">0 selected</span>
-        </div>
-        <div class="batch-controls">
-          <button onclick="loadVideosForBatch()">Load Videos from Directory</button>
-          <button onclick="selectAllVideos()">Select All</button>
-          <button onclick="selectNoneVideos()">Select None</button>
-          <button class="primary" id="startBatchBtn" onclick="startBatchAnalysis()" disabled>
-            Analyze Selected
-          </button>
-        </div>
-        <div class="video-checklist" id="videoChecklist">
-          <div style="padding: 1rem; text-align: center; color: var(--text-secondary);">
-            Click "Load Videos" to scan directory
-          </div>
         </div>
       </div>
 
@@ -1257,6 +1186,10 @@
           <h3>Summary</h3>
           <p id="summaryText"></p>
         </div>
+        <div class="timing-section" id="timingSection" style="display: none;">
+          <h3>Processing Time</h3>
+          <div class="timing-grid" id="timingGrid"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -1288,7 +1221,6 @@
 
   <script>
     // State
-    let selectedVideoPath = null;
     let currentJobId = null;
     let currentResult = null;
 
@@ -1300,9 +1232,8 @@
 
     // DOM elements
     const videoInput = document.getElementById('videoInput');
-    const videoPathInput = document.getElementById('videoPathInput');
     const fileLabel = document.getElementById('fileLabel');
-    const videoPreview = document.getElementById('videoPreview');
+    const selectedVideosEl = document.getElementById('selectedVideos');
     const modelSelect = document.getElementById('modelSelect');
     const fpsSelect = document.getElementById('fpsSelect');
     const extractFrames = document.getElementById('extractFrames');
@@ -1318,6 +1249,9 @@
     const speciesList = document.getElementById('speciesList');
     const historyList = document.getElementById('historyList');
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+    // State for selected videos (File objects with duration)
+    let selectedVideos = [];
 
     // State for starred frames, rotations, and bounding boxes
     let starredFilenames = new Set();
@@ -1530,138 +1464,156 @@
       }
     }
 
-    // Path input change
-    videoPathInput.addEventListener('input', () => {
-      const path = videoPathInput.value.trim();
-      selectedVideoPath = path;
-      analyzeBtn.disabled = !path || !path.match(/\.(mp4|mov|avi|mkv|webm)$/i);
+    // Get video duration using a temporary video element
+    function getVideoDuration(file) {
+      return new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = () => {
+          URL.revokeObjectURL(video.src);
+          resolve(video.duration);
+        };
+        video.onerror = () => resolve(0);
+        video.src = URL.createObjectURL(file);
+      });
+    }
 
-      // Check if already analyzed
-      if (path.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
-        checkVideoAnalyzed(path);
-      } else {
-        document.getElementById('alreadyAnalyzed').classList.remove('visible');
+    // Render selected videos list
+    function renderSelectedVideos() {
+      if (selectedVideos.length === 0) {
+        selectedVideosEl.innerHTML = '';
+        fileLabel.classList.remove('has-file');
+        fileLabel.textContent = 'Click to browse videos';
+        analyzeBtn.disabled = true;
+        analyzeBtn.textContent = 'Analyze';
+        return;
       }
+
+      fileLabel.classList.add('has-file');
+      fileLabel.textContent = `${selectedVideos.length} video${selectedVideos.length > 1 ? 's' : ''} selected`;
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = selectedVideos.length === 1 ? 'Analyze Video' : `Analyze ${selectedVideos.length} Videos`;
+
+      selectedVideosEl.innerHTML = selectedVideos.map((v, idx) => `
+        <div class="selected-video-item">
+          <span class="selected-video-info">
+            <span class="selected-video-name">${v.file.name}</span>
+            <span class="selected-video-meta">${formatDuration(v.duration)} · ${formatFileSize(v.file.size)}</span>
+          </span>
+          <button class="selected-video-remove" onclick="removeSelectedVideo(${idx})">×</button>
+        </div>
+      `).join('');
+    }
+
+    // Remove a video from selection
+    window.removeSelectedVideo = function(idx) {
+      selectedVideos.splice(idx, 1);
+      renderSelectedVideos();
+    };
+
+    // File selection - multiple files
+    videoInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+
+      // Get duration for each file
+      for (const file of files) {
+        const duration = await getVideoDuration(file);
+        selectedVideos.push({ file, duration });
+      }
+
+      renderSelectedVideos();
+      // Reset input so same files can be selected again
+      videoInput.value = '';
     });
 
-    // Initialize from default path
-    selectedVideoPath = videoPathInput.value.trim();
-
-    // File selection - appends filename to current path
-    videoInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        // Get the directory from current path input
-        let dir = videoPathInput.value.trim();
-        if (!dir.endsWith('/')) {
-          // If it's a file path, get the directory
-          dir = dir.substring(0, dir.lastIndexOf('/') + 1);
-        }
-
-        selectedVideoPath = dir + file.name;
-        videoPathInput.value = selectedVideoPath;
-
-        fileLabel.classList.add('has-file');
-        fileLabel.textContent = file.name;
-        analyzeBtn.disabled = false;
-
-        // Show video preview
-        videoPreview.src = URL.createObjectURL(file);
-        videoPreview.classList.add('visible');
-
-        // Check if already analyzed
-        checkVideoAnalyzed(selectedVideoPath);
-      }
-    });
-
-    // Analyze button
+    // Analyze button - upload and analyze
     analyzeBtn.addEventListener('click', async () => {
-      if (!selectedVideoPath) return;
+      if (selectedVideos.length === 0) return;
 
       try {
         analyzeBtn.disabled = true;
-        progressSection.classList.add('visible');
         errorMessage.classList.remove('visible');
         resultsSection.classList.remove('visible');
         timelineSection.classList.remove('visible');
 
-        const res = await fetch('/api/analyze', {
+        // Show upload progress
+        progressSection.classList.add('visible');
+        progressMessage.textContent = 'Uploading videos...';
+        progressFill.style.width = '0%';
+        progressPercent.textContent = '0%';
+
+        // Upload files
+        const formData = new FormData();
+        selectedVideos.forEach(v => formData.append('videos', v.file));
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+
+        // Track upload progress
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            progressFill.style.width = `${pct}%`;
+            progressPercent.textContent = `${pct}%`;
+          }
+        };
+
+        const uploadResult = await new Promise((resolve, reject) => {
+          xhr.onload = () => {
+            if (xhr.status === 200) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              reject(new Error(JSON.parse(xhr.responseText).error || 'Upload failed'));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Upload failed'));
+          xhr.send(formData);
+        });
+
+        progressSection.classList.remove('visible');
+
+        // Start batch analysis - include original names
+        const videoData = uploadResult.files.map(f => ({
+          path: f.path,
+          originalName: f.originalName,
+        }));
+
+        document.getElementById('batchProgressSection').classList.add('visible');
+        initBatchVideoList(uploadResult.files.map(f => ({
+          path: f.path,
+          name: f.originalName,
+          size: f.size,
+          duration: selectedVideos.find(v => v.file.name === f.originalName)?.duration || 0
+        })));
+
+        const res = await fetch('/api/batch/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            videoPath: selectedVideoPath,
+            videos: videoData,
             model: modelSelect.value,
             fps: parseInt(fpsSelect.value),
-            extractFrames: extractFrames.checked,
           }),
         });
 
         const data = await res.json();
+        if (data.error) throw new Error(data.error);
 
-        if (data.error) {
-          throw new Error(data.error);
-        }
+        currentBatchId = data.batchId;
+        // Store paths for cleanup after batch completes
+        window.uploadedPaths = videoData.map(v => v.path);
+        listenToBatchProgress(data.batchId);
 
-        currentJobId = data.jobId;
-        listenToProgress(data.jobId);
+        // Clear selection
+        selectedVideos = [];
+        renderSelectedVideos();
       } catch (err) {
         showError(err.message);
         analyzeBtn.disabled = false;
         progressSection.classList.remove('visible');
       }
     });
-
-    // Listen to SSE progress
-    function listenToProgress(jobId) {
-      const eventSource = new EventSource(`/api/analyze/${jobId}/progress`);
-
-      eventSource.addEventListener('progress', (e) => {
-        const data = JSON.parse(e.data);
-        updateProgress(data);
-      });
-
-      eventSource.addEventListener('complete', async () => {
-        eventSource.close();
-        progressFill.style.width = '100%';
-        progressMessage.textContent = 'Complete!';
-        progressPercent.textContent = '100%';
-
-        // Fetch result
-        const res = await fetch(`/api/analyze/${jobId}/result`);
-        const data = await res.json();
-
-        if (data.result) {
-          currentResult = data.result;
-          displayResults(data.result);
-          await loadHistory();
-          await loadAggregatedSpecies();
-        }
-
-        analyzeBtn.disabled = false;
-        setTimeout(() => {
-          progressSection.classList.remove('visible');
-        }, 1000);
-      });
-
-      eventSource.addEventListener('error', (e) => {
-        eventSource.close();
-        try {
-          const data = JSON.parse(e.data);
-          showError(data.message || 'Analysis failed');
-        } catch {
-          showError('Analysis failed');
-        }
-        analyzeBtn.disabled = false;
-        progressSection.classList.remove('visible');
-      });
-    }
-
-    // Update progress display
-    function updateProgress(data) {
-      progressFill.style.width = `${data.percent}%`;
-      progressMessage.textContent = data.message;
-      progressPercent.textContent = `${data.percent}%`;
-    }
 
     // Display results
     function displayResults(result) {
@@ -1738,6 +1690,56 @@
 
       // Summary
       document.getElementById('summaryText').textContent = result.summary;
+
+      // Timing
+      displayTiming(result.timing);
+    }
+
+    // Display timing information
+    function displayTiming(timing) {
+      const section = document.getElementById('timingSection');
+      const grid = document.getElementById('timingGrid');
+
+      if (!timing) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+
+      const items = [];
+
+      if (timing.uploadMs) {
+        items.push({ value: formatMs(timing.uploadMs), label: 'Upload to LLM' });
+      }
+      if (timing.extractFramesMs) {
+        items.push({ value: formatMs(timing.extractFramesMs), label: 'Extract Frames' });
+      }
+      if (timing.analysisMs) {
+        items.push({ value: formatMs(timing.analysisMs), label: 'AI Analysis' });
+      }
+      if (timing.frameExtractionMs) {
+        items.push({ value: formatMs(timing.frameExtractionMs), label: 'Save Frames' });
+      }
+      if (timing.totalMs) {
+        items.push({ value: formatMs(timing.totalMs), label: 'Total' });
+      }
+
+      grid.innerHTML = items.map(item => `
+        <div class="timing-item">
+          <div class="timing-value">${item.value}</div>
+          <div class="timing-label">${item.label}</div>
+        </div>
+      `).join('');
+    }
+
+    // Format milliseconds to readable string
+    function formatMs(ms) {
+      if (ms < 1000) return `${ms}ms`;
+      if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+      const mins = Math.floor(ms / 60000);
+      const secs = Math.round((ms % 60000) / 1000);
+      return `${mins}m ${secs}s`;
     }
 
     // Render timeline
@@ -2187,34 +2189,6 @@
       document.getElementById('galleryModal').classList.remove('visible');
     }
 
-    // Check if video already analyzed
-    let existingAnalysisId = null;
-
-    async function checkVideoAnalyzed(path) {
-      try {
-        const res = await fetch(`/api/history/video?path=${encodeURIComponent(path)}`);
-        const data = await res.json();
-
-        const banner = document.getElementById('alreadyAnalyzed');
-        if (data.exists) {
-          existingAnalysisId = data.analysis.id;
-          banner.classList.add('visible');
-        } else {
-          existingAnalysisId = null;
-          banner.classList.remove('visible');
-        }
-      } catch (err) {
-        console.error('Failed to check video:', err);
-      }
-    }
-
-    function loadExistingAnalysis() {
-      if (existingAnalysisId) {
-        loadAnalysis(existingAnalysisId);
-        document.getElementById('alreadyAnalyzed').classList.remove('visible');
-      }
-    }
-
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -2248,148 +2222,36 @@
 
     // ============ BATCH ANALYSIS ============
 
-    let batchVideos = [];
     let currentBatchId = null;
     let batchEventSource = null;
-    let analyzedVideoPaths = new Set();
 
-    // Show batch section when directory path is entered
-    videoPathInput.addEventListener('input', () => {
-      const path = videoPathInput.value.trim();
-      // Show batch section if path looks like a directory (ends with / or doesn't have video extension)
-      const isDirectory = path.endsWith('/') || !path.match(/\.(mp4|mov|avi|mkv|webm)$/i);
-      document.getElementById('batchSection').classList.toggle('visible', isDirectory && path.length > 0);
-    });
-
-    // Initialize batch section visibility
-    const initialPath = videoPathInput.value.trim();
-    if (initialPath.endsWith('/') || !initialPath.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
-      document.getElementById('batchSection').classList.add('visible');
+    function formatFileSize(bytes) {
+      if (!bytes || isNaN(bytes)) return '--';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
     }
 
-    async function loadVideosForBatch() {
-      const dir = videoPathInput.value.trim();
-      if (!dir) {
-        showError('Enter a directory path first');
-        return;
-      }
-
-      try {
-        // Get list of videos
-        const res = await fetch(`/api/videos?dir=${encodeURIComponent(dir)}`);
-        const data = await res.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        batchVideos = data.videos || [];
-
-        if (batchVideos.length === 0) {
-          document.getElementById('videoChecklist').innerHTML = `
-            <div style="padding: 1rem; text-align: center; color: var(--text-secondary);">
-              No videos found in directory
-            </div>
-          `;
-          return;
-        }
-
-        // Get history to check which videos are already analyzed
-        const historyRes = await fetch('/api/history');
-        const historyData = await historyRes.json();
-        analyzedVideoPaths = new Set(historyData.analyses.map(a => a.video));
-
-        // Render checklist
-        renderVideoChecklist();
-        updateBatchSelectedCount();
-      } catch (err) {
-        showError(err.message);
-      }
-    }
-
-    function renderVideoChecklist() {
-      const checklist = document.getElementById('videoChecklist');
-      checklist.innerHTML = batchVideos.map((v, idx) => {
-        const isAnalyzed = analyzedVideoPaths.has(v.path);
-        return `
-          <div class="video-checkbox-item ${isAnalyzed ? 'analyzed' : ''}">
-            <input type="checkbox" id="video_${idx}" value="${v.path}" onchange="updateBatchSelectedCount()">
-            <label for="video_${idx}" title="${v.path}">${v.name}</label>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function getSelectedVideos() {
-      const checkboxes = document.querySelectorAll('#videoChecklist input[type="checkbox"]:checked');
-      return Array.from(checkboxes).map(cb => cb.value);
-    }
-
-    function updateBatchSelectedCount() {
-      const selected = getSelectedVideos();
-      document.getElementById('batchSelectedCount').textContent = `${selected.length} selected`;
-      document.getElementById('startBatchBtn').disabled = selected.length === 0;
-    }
-
-    function selectAllVideos() {
-      document.querySelectorAll('#videoChecklist input[type="checkbox"]').forEach(cb => {
-        cb.checked = true;
-      });
-      updateBatchSelectedCount();
-    }
-
-    function selectNoneVideos() {
-      document.querySelectorAll('#videoChecklist input[type="checkbox"]').forEach(cb => {
-        cb.checked = false;
-      });
-      updateBatchSelectedCount();
-    }
-
-    async function startBatchAnalysis() {
-      const selectedVideos = getSelectedVideos();
-      if (selectedVideos.length === 0) return;
-
-      try {
-        const res = await fetch('/api/batch/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            videos: selectedVideos,
-            model: modelSelect.value,
-            fps: parseInt(fpsSelect.value),
-          }),
-        });
-
-        const data = await res.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        currentBatchId = data.batchId;
-
-        // Show batch progress section, hide batch selection
-        document.getElementById('batchSection').classList.remove('visible');
-        document.getElementById('batchProgressSection').classList.add('visible');
-
-        // Initialize batch video list
-        initBatchVideoList(selectedVideos);
-
-        // Listen to batch progress
-        listenToBatchProgress(data.batchId);
-      } catch (err) {
-        showError(err.message);
-      }
+    function formatDuration(seconds) {
+      if (!seconds || isNaN(seconds)) return '--:--';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 
     function initBatchVideoList(videos) {
       const list = document.getElementById('batchVideoList');
-      list.innerHTML = videos.map(path => {
-        const name = path.split('/').pop();
+      list.innerHTML = videos.map(v => {
+        const durationStr = formatDuration(v.duration);
+        const sizeStr = formatFileSize(v.size);
         return `
-          <div class="batch-video-item pending" data-path="${path}">
+          <div class="batch-video-item pending" data-path="${v.path}">
             <span class="batch-video-status"></span>
-            <span class="batch-video-name" title="${path}">${name}</span>
+            <span class="batch-video-info">
+              <span class="batch-video-name" title="${v.path}">${v.name}</span>
+              <span class="batch-video-meta">${durationStr} · ${sizeStr}</span>
+            </span>
             <span class="batch-video-progress"></span>
           </div>
         `;
@@ -2423,7 +2285,19 @@
       batchEventSource.addEventListener('video_complete', async (e) => {
         const data = JSON.parse(e.data);
         const speciesCount = data.result?.identifiedSpecies?.length || 0;
-        updateBatchVideoStatus(data.path, 'completed', `${speciesCount} species`);
+        const timing = data.result?.timing;
+
+        // Build status text with species count and timing
+        let statusText = `${speciesCount} species`;
+        if (timing) {
+          const parts = [];
+          if (timing.uploadMs) parts.push(`upload ${formatMs(timing.uploadMs)}`);
+          if (timing.analysisMs) parts.push(`analysis ${formatMs(timing.analysisMs)}`);
+          if (timing.totalMs) parts.push(`total ${formatMs(timing.totalMs)}`);
+          if (parts.length > 0) statusText += ` · ${parts.join(' · ')}`;
+        }
+
+        updateBatchVideoStatus(data.path, 'completed', statusText);
 
         // Update sidebar and show results as each video completes
         await loadHistory();
@@ -2441,6 +2315,11 @@
         updateBatchVideoStatus(data.path, 'failed', data.error);
       });
 
+      batchEventSource.addEventListener('video_skipped', (e) => {
+        const data = JSON.parse(e.data);
+        updateBatchVideoStatus(data.path, 'skipped', data.reason);
+      });
+
       batchEventSource.addEventListener('batch_complete', async (e) => {
         batchEventSource.close();
         batchEventSource = null;
@@ -2451,15 +2330,26 @@
         document.getElementById('batchOverallText').textContent =
           `Complete! ${data.completed.length} succeeded, ${data.failed.length} failed`;
 
+        // Clean up uploaded files
+        if (window.uploadedPaths && window.uploadedPaths.length > 0) {
+          fetch('/api/upload', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paths: window.uploadedPaths }),
+          }).catch(err => console.error('Failed to cleanup uploads:', err));
+          window.uploadedPaths = null;
+        }
+
+        // Re-enable analyze button
+        analyzeBtn.disabled = false;
+
         // Refresh history and species
         await loadHistory();
         await loadAggregatedSpecies();
 
-        // After a delay, hide progress and show batch section again
+        // After a delay, hide progress
         setTimeout(() => {
           document.getElementById('batchProgressSection').classList.remove('visible');
-          document.getElementById('batchSection').classList.add('visible');
-          loadVideosForBatch(); // Refresh to show newly analyzed status
         }, 2000);
       });
 
@@ -2472,19 +2362,31 @@
         document.getElementById('batchOverallText').textContent =
           `Cancelled. ${data.completed.length} completed, ${data.remaining} skipped`;
 
+        // Clean up uploaded files
+        if (window.uploadedPaths && window.uploadedPaths.length > 0) {
+          fetch('/api/upload', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paths: window.uploadedPaths }),
+          }).catch(err => console.error('Failed to cleanup uploads:', err));
+          window.uploadedPaths = null;
+        }
+
+        // Re-enable analyze button
+        analyzeBtn.disabled = false;
+
         await loadHistory();
         await loadAggregatedSpecies();
 
         setTimeout(() => {
           document.getElementById('batchProgressSection').classList.remove('visible');
-          document.getElementById('batchSection').classList.add('visible');
-          loadVideosForBatch();
         }, 2000);
       });
 
       batchEventSource.onerror = () => {
         batchEventSource.close();
         batchEventSource = null;
+        analyzeBtn.disabled = false;
         showError('Lost connection to batch progress');
       };
     }

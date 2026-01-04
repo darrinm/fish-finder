@@ -13,12 +13,21 @@ export interface IdentifiedSpecies {
   frameFiles?: string[];
 }
 
+export interface AnalysisTiming {
+  uploadMs?: number;      // Time to upload video to LLM (Gemini only)
+  extractFramesMs?: number; // Time to extract frames locally (OpenAI only)
+  analysisMs: number;     // Time for LLM analysis
+  frameExtractionMs?: number; // Time to extract result frames
+  totalMs: number;        // Total time
+}
+
 export interface FishFinderResult {
   video: string;
   duration: number;
   identifiedSpecies: IdentifiedSpecies[];
   summary: string;
   analyzedAt: string;
+  timing?: AnalysisTiming;
 }
 
 export type Provider = 'gemini' | 'openai';

@@ -2,9 +2,11 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rm } from 'node:fs/promises';
+import multer from 'multer';
 
 import { MODEL_ALIASES } from '../models.js';
-import { getVideoFiles } from '../video.js';
+import { getVideoFiles, getVideosWithMetadata } from '../video.js';
 import { analyzeVideoFile } from '../analyzer.js';
 import { jobManager } from './progress.js';
 import {
@@ -13,6 +15,7 @@ import {
   getAnalysis,
   deleteAnalysis,
   clearHistory,
+  deduplicateHistory,
   getAggregatedSpecies,
   getStarredFrames,
   toggleStarFrame,
@@ -27,6 +30,56 @@ import type { AnalyzeOptions, Provider } from '../types.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export const router = Router();
+
+// Configure multer for video uploads
+const uploadsDir = join(__dirname, '../../data/uploads');
+const storage = multer.diskStorage({
+  destination: uploadsDir,
+  filename: (_req, file, cb) => {
+    // Use unique ID + original extension to avoid conflicts
+    const ext = file.originalname.split('.').pop();
+    cb(null, `${uuidv4()}.${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  fileFilter: (_req, file, cb) => {
+    const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
+    const ext = '.' + file.originalname.split('.').pop()?.toLowerCase();
+    cb(null, videoExts.includes(ext));
+  },
+});
+
+// POST /api/upload - Upload video files
+router.post('/upload', upload.array('videos', 50), (req: Request, res: Response) => {
+  const files = req.files as Express.Multer.File[];
+  if (!files || files.length === 0) {
+    res.status(400).json({ error: 'No video files uploaded' });
+    return;
+  }
+
+  const uploaded = files.map(f => ({
+    originalName: f.originalname,
+    path: f.path,
+    size: f.size,
+  }));
+
+  res.json({ files: uploaded });
+});
+
+// DELETE /api/upload - Clean up uploaded files
+router.delete('/upload', async (req: Request, res: Response) => {
+  try {
+    const { paths } = req.body as { paths: string[] };
+    if (paths && paths.length > 0) {
+      await Promise.all(paths.map(p => rm(p, { force: true })));
+    }
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
 
 // GET /api/models - List available models
 router.get('/models', (_req: Request, res: Response) => {
@@ -49,13 +102,8 @@ router.get('/videos', async (req: Request, res: Response) => {
       return;
     }
 
-    const videos = await getVideoFiles(dir);
-    const result = videos.map(path => ({
-      path,
-      name: basename(path),
-    }));
-
-    res.json({ videos: result });
+    const videos = await getVideosWithMetadata(dir);
+    res.json({ videos });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: message });
@@ -333,6 +381,17 @@ router.delete('/history', async (_req: Request, res: Response) => {
   }
 });
 
+// POST /api/history/deduplicate - Remove duplicate video entries
+router.post('/history/deduplicate', async (_req: Request, res: Response) => {
+  try {
+    const removed = await deduplicateHistory();
+    res.json({ success: true, removed });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
 // GET /api/starred - Get all starred frames
 router.get('/starred', async (_req: Request, res: Response) => {
   try {
@@ -485,14 +544,27 @@ router.post('/batch/analyze', async (req: Request, res: Response) => {
       return;
     }
 
-    // Create batch job
-    const batch = jobManager.createBatch(videos, model, parseFloat(fps) || 1);
+    // Support both old format (string[]) and new format ({path, originalName}[])
+    const videoList: Array<{ path: string; originalName: string }> = videos.map(
+      (v: string | { path: string; originalName: string }) =>
+        typeof v === 'string' ? { path: v, originalName: basename(v) } : v
+    );
+
+    // Create batch job with paths
+    const batch = jobManager.createBatch(
+      videoList.map(v => v.path),
+      model,
+      parseFloat(fps) || 1
+    );
+
+    // Store original names mapping
+    const originalNames = new Map(videoList.map(v => [v.path, v.originalName]));
 
     // Return batch ID immediately
     res.json({ batchId: batch.batchId, status: 'started', totalVideos: videos.length });
 
     // Process videos in background
-    processBatchVideos(batch.batchId, modelConfig);
+    processBatchVideos(batch.batchId, modelConfig, originalNames);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: message });
@@ -502,15 +574,28 @@ router.post('/batch/analyze', async (req: Request, res: Response) => {
 // Background batch processing function
 async function processBatchVideos(
   batchId: string,
-  modelConfig: { model: string; provider: string }
+  modelConfig: { model: string; provider: string },
+  originalNames: Map<string, string>
 ): Promise<void> {
   const batch = jobManager.getBatch(batchId);
   if (!batch) return;
+
+  // Get already-analyzed videos to skip duplicates (check by original name)
+  const history = await getHistory();
+  const analyzedNames = new Set(history.map(a => basename(a.video)));
 
   for (const videoPath of batch.videos) {
     // Check if batch was cancelled
     if (jobManager.isBatchCancelled(batchId)) {
       break;
+    }
+
+    const originalName = originalNames.get(videoPath) || basename(videoPath);
+
+    // Skip already-analyzed videos (by original name)
+    if (analyzedNames.has(originalName)) {
+      jobManager.skipBatchVideo(batchId, videoPath, 'Already analyzed');
+      continue;
     }
 
     const jobId = uuidv4();
@@ -540,6 +625,9 @@ async function processBatchVideos(
       });
 
       const result = await analyzeVideoFile(videoPath, options);
+
+      // Replace UUID path with original filename for storage
+      result.video = originalName;
 
       jobManager.updateBatchVideoProgress(batchId, videoPath, {
         stage: 'extracting',
@@ -630,6 +718,10 @@ router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
     res.write(`event: video_error\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  const onVideoSkipped = (data: unknown) => {
+    res.write(`event: video_skipped\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
   const onBatchComplete = (data: unknown) => {
     res.write(`event: batch_complete\ndata: ${JSON.stringify(data)}\n\n`);
     cleanup();
@@ -648,6 +740,7 @@ router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
     jobManager.off(`batch:progress:${batchId}`, onBatchProgress);
     jobManager.off(`batch:video_complete:${batchId}`, onVideoComplete);
     jobManager.off(`batch:video_error:${batchId}`, onVideoError);
+    jobManager.off(`batch:video_skipped:${batchId}`, onVideoSkipped);
     jobManager.off(`batch:complete:${batchId}`, onBatchComplete);
     jobManager.off(`batch:cancelled:${batchId}`, onBatchCancelled);
   };
@@ -657,6 +750,7 @@ router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
   jobManager.on(`batch:progress:${batchId}`, onBatchProgress);
   jobManager.on(`batch:video_complete:${batchId}`, onVideoComplete);
   jobManager.on(`batch:video_error:${batchId}`, onVideoError);
+  jobManager.on(`batch:video_skipped:${batchId}`, onVideoSkipped);
   jobManager.on(`batch:complete:${batchId}`, onBatchComplete);
   jobManager.on(`batch:cancelled:${batchId}`, onBatchCancelled);
 

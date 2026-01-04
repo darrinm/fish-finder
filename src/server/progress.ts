@@ -192,6 +192,20 @@ class JobManager extends EventEmitter {
     }
   }
 
+  skipBatchVideo(batchId: string, videoPath: string, reason: string): void {
+    const batch = this.batches.get(batchId);
+    if (batch) {
+      // Count skipped videos as completed (they already have results)
+      batch.completed.push(videoPath);
+      this.emit(`batch:video_skipped:${batchId}`, {
+        path: videoPath,
+        reason,
+        completedCount: batch.completed.length,
+        total: batch.videos.length,
+      });
+    }
+  }
+
   completeBatch(batchId: string): void {
     const batch = this.batches.get(batchId);
     if (batch) {

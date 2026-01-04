@@ -2,16 +2,22 @@ import { mkdir } from 'node:fs/promises';
 import { uploadVideo, analyzeVideo } from './gemini.js';
 import { analyzeWithOpenAI } from './openai.js';
 import { extractFrame, extractFramesAsBase64, checkFfmpeg } from './video.js';
-import type { FishFinderResult, IdentifiedSpecies, AnalyzeOptions, GeminiAnalysisResponse } from './types.js';
+import type { FishFinderResult, IdentifiedSpecies, AnalyzeOptions, GeminiAnalysisResponse, AnalysisTiming } from './types.js';
+
+interface AnalysisWithTiming {
+  analysis: GeminiAnalysisResponse;
+  timing: Partial<AnalysisTiming>;
+}
 
 export async function analyzeVideoFile(
   videoPath: string,
   options: AnalyzeOptions
 ): Promise<FishFinderResult> {
   const { provider } = options;
+  const totalStart = Date.now();
 
   // Route to appropriate provider
-  const analysis = provider === 'openai'
+  const { analysis, timing } = provider === 'openai'
     ? await analyzeWithOpenAIProvider(videoPath, options)
     : await analyzeWithGeminiProvider(videoPath, options);
 
@@ -26,9 +32,14 @@ export async function analyzeVideoFile(
   }));
 
   // Extract frames if requested
+  let frameExtractionMs: number | undefined;
   if (options.extractFrames && identifiedSpecies.length > 0) {
+    const frameStart = Date.now();
     await extractSpeciesFrames(videoPath, identifiedSpecies, options);
+    frameExtractionMs = Date.now() - frameStart;
   }
+
+  const totalMs = Date.now() - totalStart;
 
   return {
     video: videoPath,
@@ -36,33 +47,56 @@ export async function analyzeVideoFile(
     identifiedSpecies,
     summary: analysis.summary,
     analyzedAt: new Date().toISOString(),
+    timing: {
+      ...timing,
+      frameExtractionMs,
+      totalMs,
+    } as AnalysisTiming,
   };
 }
 
 async function analyzeWithGeminiProvider(
   videoPath: string,
   options: AnalyzeOptions
-): Promise<GeminiAnalysisResponse> {
+): Promise<AnalysisWithTiming> {
   const { model, verbose, fps } = options;
 
   // Upload video to Gemini
+  const uploadStart = Date.now();
   const { uri, mimeType } = await uploadVideo(videoPath, verbose);
+  const uploadMs = Date.now() - uploadStart;
 
   // Analyze with Gemini
-  return analyzeVideo(uri, mimeType, model, verbose, fps);
+  const analysisStart = Date.now();
+  const analysis = await analyzeVideo(uri, mimeType, model, verbose, fps);
+  const analysisMs = Date.now() - analysisStart;
+
+  return {
+    analysis,
+    timing: { uploadMs, analysisMs },
+  };
 }
 
 async function analyzeWithOpenAIProvider(
   videoPath: string,
   options: AnalyzeOptions
-): Promise<GeminiAnalysisResponse> {
+): Promise<AnalysisWithTiming> {
   const { model, verbose, fps = 1 } = options;
 
   // Extract frames locally
+  const extractStart = Date.now();
   const { frames, duration } = await extractFramesAsBase64(videoPath, fps, verbose);
+  const extractFramesMs = Date.now() - extractStart;
 
   // Analyze with OpenAI
-  return analyzeWithOpenAI(frames, model, verbose, duration);
+  const analysisStart = Date.now();
+  const analysis = await analyzeWithOpenAI(frames, model, verbose, duration);
+  const analysisMs = Date.now() - analysisStart;
+
+  return {
+    analysis,
+    timing: { extractFramesMs, analysisMs },
+  };
 }
 
 async function extractSpeciesFrames(

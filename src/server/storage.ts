@@ -87,6 +87,30 @@ export async function clearHistory(): Promise<void> {
   await writeHistory({ analyses: [] });
 }
 
+export async function deduplicateHistory(): Promise<number> {
+  const history = await readHistory();
+  const seen = new Set<string>();
+  const deduplicated: StoredAnalysis[] = [];
+
+  // Sort by date descending to keep most recent
+  const sorted = [...history.analyses].sort((a, b) =>
+    new Date(b.analyzedAt).getTime() - new Date(a.analyzedAt).getTime()
+  );
+
+  for (const analysis of sorted) {
+    if (!seen.has(analysis.video)) {
+      seen.add(analysis.video);
+      deduplicated.push(analysis);
+    }
+  }
+
+  const removedCount = history.analyses.length - deduplicated.length;
+  if (removedCount > 0) {
+    await writeHistory({ analyses: deduplicated });
+  }
+  return removedCount;
+}
+
 export interface SpeciesCount {
   commonName: string;
   scientificName: string;
