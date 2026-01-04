@@ -23,6 +23,7 @@ export interface AnalysisTiming {
 
 export interface FishFinderResult {
   video: string;
+  videoPath?: string;  // Path to uploaded video file for playback
   duration: number;
   identifiedSpecies: IdentifiedSpecies[];
   summary: string;

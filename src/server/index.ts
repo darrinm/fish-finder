@@ -22,6 +22,10 @@ app.use('/api', apiRouter);
 const framesDir = join(__dirname, '../../frames');
 app.use('/frames', express.static(framesDir));
 
+// Serve uploaded videos for playback
+const uploadsDir = join(__dirname, '../../data/uploads');
+app.use('/uploads', express.static(uploadsDir));
+
 // Serve static files from web directory
 const webDir = join(__dirname, '../../web');
 app.use(express.static(webDir));

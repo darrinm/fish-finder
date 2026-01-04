@@ -626,8 +626,9 @@ async function processBatchVideos(
 
       const result = await analyzeVideoFile(videoPath, options);
 
-      // Replace UUID path with original filename for storage
+      // Store original filename for display, keep upload path for playback
       result.video = originalName;
+      result.videoPath = `/uploads/${basename(videoPath)}`;
 
       jobManager.updateBatchVideoProgress(batchId, videoPath, {
         stage: 'extracting',
