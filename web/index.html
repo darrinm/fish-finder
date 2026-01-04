@@ -154,6 +154,43 @@
       background: rgba(239, 68, 68, 0.1);
     }
 
+    .edit-dates-btn {
+      padding: 0.25rem 0.5rem;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+
+    .edit-dates-btn:hover {
+      background: rgba(0, 188, 212, 0.1);
+    }
+
+    .date-group-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      padding: 0.5rem 0.25rem;
+      margin-top: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .date-group-header:first-child {
+      margin-top: 0;
+    }
+
+    .history-item-date {
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    .history-item-date:hover {
+      background: rgba(0, 188, 212, 0.2);
+    }
+
     /* Main content */
     .main {
       flex: 1;
@@ -927,6 +964,114 @@
       border-radius: 0 0 4px 4px;
     }
 
+    /* Dates Modal */
+    .dates-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .dates-modal.visible {
+      display: flex;
+    }
+
+    .dates-modal-content {
+      background: var(--bg);
+      border-radius: 8px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dates-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dates-modal-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .dates-modal-close {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .dates-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .dates-row {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dates-row:last-child {
+      border-bottom: none;
+    }
+
+    .dates-video-name {
+      flex: 1;
+      font-size: 0.875rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dates-input {
+      padding: 0.375rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text);
+      font-size: 0.875rem;
+    }
+
+    .dates-modal-footer {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      padding: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .dates-save-btn {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: black;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .dates-cancel-btn {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
     /* Star button */
     .star-btn {
       position: absolute;
@@ -1144,7 +1289,10 @@
         </li>
       </ul>
 
-      <h2>Past Analyses</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Past Analyses</h2>
+        <button class="edit-dates-btn" id="editDatesBtn" style="display: none;" onclick="openEditDatesModal()">Edit Dates</button>
+      </div>
       <div id="historyList">
         <div class="empty-state" style="padding: 1rem; font-size: 0.875rem;">
           No analyses yet
@@ -1289,6 +1437,21 @@
     <div class="gallery-grid" id="galleryGrid"></div>
   </div>
 
+  <!-- Edit Dates Modal -->
+  <div class="dates-modal" id="datesModal">
+    <div class="dates-modal-content">
+      <div class="dates-modal-header">
+        <h2>Edit Recording Dates</h2>
+        <button class="dates-modal-close" onclick="closeDatesModal()">&times;</button>
+      </div>
+      <div class="dates-modal-body" id="datesModalBody"></div>
+      <div class="dates-modal-footer">
+        <button class="dates-save-btn" onclick="saveBatchDates()">Save All</button>
+        <button class="dates-cancel-btn" onclick="closeDatesModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // State
     let currentJobId = null;
@@ -1319,6 +1482,7 @@
     const speciesList = document.getElementById('speciesList');
     const historyList = document.getElementById('historyList');
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    const editDatesBtn = document.getElementById('editDatesBtn');
 
     // State for selected videos (File objects with duration)
     let selectedVideos = [];
@@ -1327,6 +1491,7 @@
     let starredFilenames = new Set();
     let frameRotations = {};
     let frameBoundingBoxes = {};
+    let allAnalyses = [];  // Store for batch editing
 
     // Initialize
     async function init() {
@@ -1453,11 +1618,24 @@
       }
     }
 
+    // Format date for display (e.g., "Jan 9, 2016")
+    function formatShortDate(isoString) {
+      const date = new Date(isoString);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // Get date key for grouping (YYYY-MM-DD)
+    function getDateKey(analysis) {
+      const dateStr = analysis.recordedAt || analysis.analyzedAt;
+      return dateStr.split('T')[0];
+    }
+
     // Load history
     async function loadHistory() {
       try {
         const res = await fetch('/api/history');
         const data = await res.json();
+        allAnalyses = data.analyses;  // Store for batch editing
 
         if (data.analyses.length === 0) {
           historyList.innerHTML = `
@@ -1466,31 +1644,170 @@
             </div>
           `;
           clearHistoryBtn.style.display = 'none';
+          editDatesBtn.style.display = 'none';
         } else {
-          historyList.innerHTML = data.analyses
-            .slice()
-            .sort((a, b) => {
-              const nameA = a.video.split('/').pop().toLowerCase();
-              const nameB = b.video.split('/').pop().toLowerCase();
-              return nameA.localeCompare(nameB);
-            })
-            .map(a => `
-            <div class="history-item" data-id="${a.id}" onclick="loadAnalysis('${a.id}')">
-              <div class="history-item-header">
-                <div class="history-item-name">${a.video.split('/').pop()}</div>
-                <button class="history-item-delete" onclick="event.stopPropagation(); deleteAnalysisWithConfirm('${a.id}', '${a.video.split('/').pop().replace(/'/g, "\\'")}')" title="Delete analysis">🗑</button>
-              </div>
-              <div class="history-item-meta">
-                ${new Date(a.analyzedAt).toLocaleDateString()} &bull;
-                ${a.identifiedSpecies.length} species
-              </div>
-            </div>
-          `).join('');
+          // Group by date
+          const groups = {};
+          for (const a of data.analyses) {
+            const dateKey = getDateKey(a);
+            if (!groups[dateKey]) groups[dateKey] = [];
+            groups[dateKey].push(a);
+          }
+
+          // Sort groups by date descending
+          const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+          // Build HTML with date headers
+          let html = '';
+          for (const dateKey of sortedDates) {
+            const groupAnalyses = groups[dateKey];
+            // Sort within group by time, then video name
+            groupAnalyses.sort((a, b) => {
+              const timeA = a.recordedAt || a.analyzedAt;
+              const timeB = b.recordedAt || b.analyzedAt;
+              if (timeA !== timeB) return timeA.localeCompare(timeB);
+              return a.video.localeCompare(b.video);
+            });
+
+            // Date header
+            const displayDate = formatShortDate(dateKey + 'T00:00:00');
+            html += `<div class="date-group-header">${displayDate}</div>`;
+
+            // Items in group
+            for (const a of groupAnalyses) {
+              const dateStr = a.recordedAt || a.analyzedAt;
+              const displayDateValue = formatShortDate(dateStr);
+              html += `
+              <div class="history-item" data-id="${a.id}" onclick="loadAnalysis('${a.id}')">
+                <div class="history-item-header">
+                  <div class="history-item-name">${a.video.split('/').pop()}</div>
+                  <button class="history-item-delete" onclick="event.stopPropagation(); deleteAnalysisWithConfirm('${a.id}', '${a.video.split('/').pop().replace(/'/g, "\\'")}')" title="Delete analysis">🗑</button>
+                </div>
+                <div class="history-item-meta">
+                  <span class="history-item-date" onclick="event.stopPropagation(); editAnalysisDate('${a.id}', this)" title="Click to edit date">${displayDateValue}</span> &bull;
+                  ${a.identifiedSpecies.length} species
+                </div>
+              </div>`;
+            }
+          }
+
+          historyList.innerHTML = html;
           clearHistoryBtn.style.display = 'block';
+          editDatesBtn.style.display = 'block';
         }
       } catch (err) {
         console.error('Failed to load history:', err);
       }
+    }
+
+    // Inline date editing
+    async function editAnalysisDate(id, el) {
+      const analysis = allAnalyses.find(a => a.id === id);
+      if (!analysis) return;
+
+      const currentDate = analysis.recordedAt || analysis.analyzedAt;
+      // Convert to datetime-local format (YYYY-MM-DDTHH:mm)
+      const localValue = currentDate.slice(0, 16);
+
+      const input = document.createElement('input');
+      input.type = 'datetime-local';
+      input.value = localValue;
+      input.style.cssText = 'font-size: 0.75rem; padding: 2px; border-radius: 3px; border: 1px solid var(--accent);';
+
+      const originalText = el.textContent;
+      el.textContent = '';
+      el.appendChild(input);
+      input.focus();
+
+      async function save() {
+        const newValue = input.value;
+        if (newValue && newValue !== localValue) {
+          const isoDate = new Date(newValue).toISOString();
+          try {
+            const res = await fetch(`/api/history/${id}/date`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recordedAt: isoDate })
+            });
+            if (res.ok) {
+              await loadHistory();  // Reload to regroup
+              return;
+            }
+          } catch (err) {
+            console.error('Failed to update date:', err);
+          }
+        }
+        el.textContent = originalText;
+      }
+
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') save();
+        if (e.key === 'Escape') el.textContent = originalText;
+      });
+    }
+
+    // Batch edit dates modal
+    function openEditDatesModal() {
+      const modal = document.getElementById('datesModal');
+      const body = document.getElementById('datesModalBody');
+
+      // Sort by video name for easier editing
+      const sorted = [...allAnalyses].sort((a, b) => a.video.localeCompare(b.video));
+
+      body.innerHTML = sorted.map(a => {
+        const dateStr = a.recordedAt || a.analyzedAt;
+        const localValue = dateStr.slice(0, 16);
+        return `
+          <div class="dates-row" data-id="${a.id}">
+            <div class="dates-video-name" title="${a.video}">${a.video.split('/').pop()}</div>
+            <input type="datetime-local" class="dates-input" value="${localValue}" data-original="${localValue}">
+          </div>
+        `;
+      }).join('');
+
+      modal.classList.add('visible');
+    }
+
+    function closeDatesModal() {
+      document.getElementById('datesModal').classList.remove('visible');
+    }
+
+    async function saveBatchDates() {
+      const rows = document.querySelectorAll('.dates-row');
+      const updates = [];
+
+      for (const row of rows) {
+        const id = row.dataset.id;
+        const input = row.querySelector('.dates-input');
+        const newValue = input.value;
+        const originalValue = input.dataset.original;
+
+        if (newValue && newValue !== originalValue) {
+          updates.push({ id, recordedAt: new Date(newValue).toISOString() });
+        }
+      }
+
+      if (updates.length === 0) {
+        closeDatesModal();
+        return;
+      }
+
+      // Save all changes
+      for (const update of updates) {
+        try {
+          await fetch(`/api/history/${update.id}/date`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recordedAt: update.recordedAt })
+          });
+        } catch (err) {
+          console.error(`Failed to update date for ${update.id}:`, err);
+        }
+      }
+
+      closeDatesModal();
+      await loadHistory();
     }
 
     // Load aggregated species

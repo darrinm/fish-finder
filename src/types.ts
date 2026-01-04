@@ -28,6 +28,7 @@ export interface FishFinderResult {
   identifiedSpecies: IdentifiedSpecies[];
   summary: string;
   analyzedAt: string;
+  recordedAt?: string;  // Video recording datetime from camera metadata
   timing?: AnalysisTiming;
 }
 

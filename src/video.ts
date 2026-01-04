@@ -81,6 +81,24 @@ export async function getVideosWithMetadata(inputPath: string): Promise<VideoMet
   return Promise.all(videos.map(getVideoMetadata));
 }
 
+export async function getVideoRecordingDate(videoPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execAsync(
+      `ffprobe -v error -print_format json -show_format "${videoPath}"`,
+      { timeout: 10000 }
+    );
+    const data = JSON.parse(stdout);
+    const creationTime = data?.format?.tags?.creation_time;
+    if (creationTime) {
+      // Return ISO datetime string
+      return new Date(creationTime).toISOString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function extractFrame(
   videoPath: string,
   timestampSeconds: number,

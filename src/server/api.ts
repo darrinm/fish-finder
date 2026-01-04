@@ -6,7 +6,7 @@ import { rm } from 'node:fs/promises';
 import multer from 'multer';
 
 import { MODEL_ALIASES } from '../models.js';
-import { getVideoFiles, getVideosWithMetadata, createThumbnail } from '../video.js';
+import { getVideoFiles, getVideosWithMetadata, createThumbnail, getVideoRecordingDate } from '../video.js';
 import { analyzeVideoFile } from '../analyzer.js';
 import { jobManager } from './progress.js';
 import {
@@ -23,6 +23,7 @@ import {
   setRotation,
   getAllBoundingBoxes,
   saveBoundingBoxes,
+  updateAnalysisDate,
 } from './storage.js';
 import { detectBoundingBoxes, listFiles, deleteAllFiles } from '../gemini.js';
 import type { AnalyzeOptions, Provider } from '../types.js';
@@ -370,6 +371,28 @@ router.delete('/history/:id', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/history/:id/date - Update recording date for an analysis
+router.patch('/history/:id/date', async (req: Request, res: Response) => {
+  try {
+    const { recordedAt } = req.body;
+    if (!recordedAt) {
+      res.status(400).json({ error: 'Missing recordedAt' });
+      return;
+    }
+
+    const updated = await updateAnalysisDate(req.params.id, recordedAt);
+    if (!updated) {
+      res.status(404).json({ error: 'Analysis not found' });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
 // DELETE /api/history - Clear all history
 router.delete('/history', async (_req: Request, res: Response) => {
   try {
@@ -629,6 +652,12 @@ async function processBatchVideos(
       // Store original filename for display, keep upload path for playback
       result.video = originalName;
       result.videoPath = `/uploads/${basename(videoPath)}`;
+
+      // Extract recording date from video metadata
+      const recordedAt = await getVideoRecordingDate(videoPath);
+      if (recordedAt) {
+        result.recordedAt = recordedAt;
+      }
 
       jobManager.updateBatchVideoProgress(batchId, videoPath, {
         stage: 'extracting',

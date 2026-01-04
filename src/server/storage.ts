@@ -72,6 +72,19 @@ export async function getAnalysis(id: string): Promise<StoredAnalysis | null> {
   return history.analyses.find(a => a.id === id) || null;
 }
 
+export async function updateAnalysisDate(id: string, recordedAt: string): Promise<boolean> {
+  const history = await readHistory();
+  const analysis = history.analyses.find(a => a.id === id);
+
+  if (!analysis) {
+    return false;
+  }
+
+  analysis.recordedAt = recordedAt;
+  await writeHistory(history);
+  return true;
+}
+
 export async function deleteAnalysis(id: string): Promise<boolean> {
   const history = await readHistory();
   const index = history.analyses.findIndex(a => a.id === id);
