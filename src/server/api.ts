@@ -793,79 +793,88 @@ async function processIncrementalBatch(
   const history = await getHistory();
   const analyzedNames = new Set(history.map(a => basename(a.video)));
 
-  // Process loop: continue until batch is done or cancelled
-  while (!jobManager.isBatchCancelled(batchId)) {
-    // Get next video from queue
-    const nextVideo = jobManager.getNextQueuedVideo(batchId);
+  // Worker function - each worker pulls from queue and processes
+  const worker = async () => {
+    while (!jobManager.isBatchCancelled(batchId)) {
+      // Get next video from queue
+      const nextVideo = jobManager.getNextQueuedVideo(batchId);
 
-    if (!nextVideo) {
-      // Queue empty - check if we should wait or finish
-      if (jobManager.isBatchDone(batchId)) {
-        break; // All uploads complete and queue empty
-      }
-      // Wait for more videos to be added (poll every 100ms)
-      await new Promise(resolve => setTimeout(resolve, 100));
-      continue;
-    }
-
-    const { path: videoPath, originalName } = nextVideo;
-
-    // Skip already-analyzed videos (by original name)
-    if (analyzedNames.has(originalName)) {
-      jobManager.skipBatchVideo(batchId, videoPath, 'Already analyzed');
-      continue;
-    }
-
-    const jobId = uuidv4();
-    jobManager.startBatchVideo(batchId, videoPath, jobId);
-
-    try {
-      const options: AnalyzeOptions = {
-        output: 'json',
-        extractFrames: join(__dirname, '../../frames'),
-        model: modelConfig.model,
-        verbose: false,
-        fps: batch.fps,
-        provider: modelConfig.provider as Provider,
-      };
-
-      // Update progress
-      jobManager.updateBatchVideoProgress(batchId, videoPath, {
-        stage: 'analyzing',
-        percent: 30,
-        message: 'Analyzing with AI...',
-      });
-
-      const result = await analyzeVideoFile(videoPath, options);
-
-      // Store original filename for display, keep upload path for playback
-      result.video = originalName;
-      result.videoPath = `/uploads/${basename(videoPath)}`;
-
-      // Extract recording date from video metadata
-      const recordedAt = await getVideoRecordingDate(videoPath);
-      if (recordedAt) {
-        result.recordedAt = recordedAt;
+      if (!nextVideo) {
+        // Queue empty - check if we should wait or finish
+        if (jobManager.isBatchDone(batchId)) {
+          break; // All uploads complete and queue empty
+        }
+        // Wait for more videos to be added (poll every 100ms)
+        await new Promise(resolve => setTimeout(resolve, 100));
+        continue;
       }
 
-      jobManager.updateBatchVideoProgress(batchId, videoPath, {
-        stage: 'extracting',
-        percent: 90,
-        message: 'Saving results...',
-      });
+      const { path: videoPath, originalName } = nextVideo;
 
-      // Auto-save to history
-      await saveAnalysis(result);
+      // Skip already-analyzed videos (by original name)
+      if (analyzedNames.has(originalName)) {
+        jobManager.skipBatchVideo(batchId, videoPath, 'Already analyzed');
+        continue;
+      }
 
-      // Add to analyzed set so we don't re-analyze if added again
+      // Mark as being analyzed to prevent other workers from picking it up
       analyzedNames.add(originalName);
 
-      jobManager.completeBatchVideo(batchId, videoPath, result);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Analysis failed';
-      jobManager.failBatchVideo(batchId, videoPath, message);
+      const jobId = uuidv4();
+      jobManager.startBatchVideo(batchId, videoPath, jobId);
+
+      try {
+        const options: AnalyzeOptions = {
+          output: 'json',
+          extractFrames: join(__dirname, '../../frames'),
+          model: modelConfig.model,
+          verbose: false,
+          fps: batch.fps,
+          provider: modelConfig.provider as Provider,
+        };
+
+        // Update progress
+        jobManager.updateBatchVideoProgress(batchId, videoPath, {
+          stage: 'analyzing',
+          percent: 30,
+          message: 'Analyzing with AI...',
+        });
+
+        const result = await analyzeVideoFile(videoPath, options);
+
+        // Store original filename for display, keep upload path for playback
+        result.video = originalName;
+        result.videoPath = `/uploads/${basename(videoPath)}`;
+
+        // Extract recording date from video metadata
+        const recordedAt = await getVideoRecordingDate(videoPath);
+        if (recordedAt) {
+          result.recordedAt = recordedAt;
+        }
+
+        jobManager.updateBatchVideoProgress(batchId, videoPath, {
+          stage: 'extracting',
+          percent: 90,
+          message: 'Saving results...',
+        });
+
+        // Auto-save to history
+        await saveAnalysis(result);
+
+        jobManager.completeBatchVideo(batchId, videoPath, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Analysis failed';
+        jobManager.failBatchVideo(batchId, videoPath, message);
+      }
     }
+  };
+
+  // Spawn 3 concurrent workers
+  const workers = [];
+  for (let i = 0; i < 3; i++) {
+    workers.push(worker());
   }
+  await Promise.all(workers);
 
   // Mark batch as complete
   if (!jobManager.isBatchCancelled(batchId)) {

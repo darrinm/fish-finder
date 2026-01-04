@@ -1327,7 +1327,7 @@
           <div class="file-input-wrapper">
             <input type="file" id="videoInput" class="file-input" accept="video/*" multiple>
             <label for="videoInput" class="file-label" id="fileLabel">
-              Click to browse videos
+              Choose videos
             </label>
           </div>
           <div class="selected-videos" id="selectedVideos"></div>
@@ -1882,7 +1882,7 @@
       if (selectedVideos.length === 0) {
         selectedVideosEl.innerHTML = '';
         fileLabel.classList.remove('has-file');
-        fileLabel.textContent = 'Click to browse videos';
+        fileLabel.textContent = 'Choose videos';
         analyzeBtn.disabled = true;
         analyzeBtn.textContent = 'Analyze';
         return;
