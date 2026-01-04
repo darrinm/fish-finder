@@ -1,3 +1,21 @@
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev for build)
+RUN npm ci
+
+# Copy source files
+COPY tsconfig.json ./
+COPY src/ ./src/
+
+# Build TypeScript
+RUN npm run build
+
+# Production image
 FROM node:20-slim
 
 # Install ffmpeg for video processing
@@ -7,14 +25,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and install production dependencies
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci --only=production
 
-# Copy built application
-COPY dist/ ./dist/
+# Copy built application from builder
+COPY --from=builder /app/dist ./dist/
 COPY web/ ./web/
 
 # Create data directories
