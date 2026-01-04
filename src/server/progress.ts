@@ -21,9 +21,16 @@ export interface Job {
   completedAt: Date | null;
 }
 
+export interface VideoQueueItem {
+  path: string;
+  originalName: string;
+}
+
 export interface BatchJob {
   batchId: string;
   videos: string[];
+  videoQueue: VideoQueueItem[];  // Dynamic queue for incremental additions
+  originalNames: Map<string, string>;  // path -> originalName mapping
   model: string;
   fps: number;
   currentIndex: number;
@@ -32,6 +39,7 @@ export interface BatchJob {
   failed: Array<{ path: string; error: string }>;
   results: Map<string, FishFinderResult>;
   status: BatchStatus;
+  uploadsComplete: boolean;  // True when all uploads are done
   startedAt: Date;
   completedAt: Date | null;
 }
@@ -111,6 +119,8 @@ class JobManager extends EventEmitter {
     const batch: BatchJob = {
       batchId,
       videos,
+      videoQueue: videos.map(v => ({ path: v, originalName: v })),
+      originalNames: new Map(),
       model,
       fps,
       currentIndex: -1,
@@ -119,12 +129,95 @@ class JobManager extends EventEmitter {
       failed: [],
       results: new Map(),
       status: 'pending',
+      uploadsComplete: true,  // Legacy batches have all videos upfront
       startedAt: new Date(),
       completedAt: null,
     };
 
     this.batches.set(batchId, batch);
     return batch;
+  }
+
+  // Create empty batch for incremental video additions
+  createEmptyBatch(model: string, fps: number, expectedCount?: number): BatchJob {
+    const batchId = uuidv4();
+    const batch: BatchJob = {
+      batchId,
+      videos: [],
+      videoQueue: [],
+      originalNames: new Map(),
+      model,
+      fps,
+      currentIndex: -1,
+      currentJobId: null,
+      completed: [],
+      failed: [],
+      results: new Map(),
+      status: 'pending',
+      uploadsComplete: false,  // Will be set true when all uploads complete
+      startedAt: new Date(),
+      completedAt: null,
+    };
+
+    this.batches.set(batchId, batch);
+    this.emit(`batch:created:${batchId}`, { batchId, expectedCount });
+    return batch;
+  }
+
+  // Add video to batch (can be called while batch is processing)
+  addVideoToBatch(batchId: string, videoPath: string, originalName: string): boolean {
+    const batch = this.batches.get(batchId);
+    if (!batch || batch.status === 'completed' || batch.status === 'cancelled') {
+      return false;
+    }
+
+    batch.videos.push(videoPath);
+    batch.videoQueue.push({ path: videoPath, originalName });
+    batch.originalNames.set(videoPath, originalName);
+
+    this.emit(`batch:video_added:${batchId}`, {
+      path: videoPath,
+      originalName,
+      queueLength: batch.videoQueue.length,
+      total: batch.videos.length,
+    });
+
+    return true;
+  }
+
+  // Mark all uploads complete (batch can finish when queue is empty)
+  markUploadsComplete(batchId: string): void {
+    const batch = this.batches.get(batchId);
+    if (batch) {
+      batch.uploadsComplete = true;
+      this.emit(`batch:uploads_complete:${batchId}`, {
+        total: batch.videos.length,
+      });
+    }
+  }
+
+  // Get next video from queue (returns null if queue empty)
+  getNextQueuedVideo(batchId: string): VideoQueueItem | null {
+    const batch = this.batches.get(batchId);
+    if (!batch || batch.videoQueue.length === 0) {
+      return null;
+    }
+    return batch.videoQueue.shift() || null;
+  }
+
+  // Check if batch should continue waiting or finish
+  shouldBatchWait(batchId: string): boolean {
+    const batch = this.batches.get(batchId);
+    if (!batch) return false;
+    // Wait if: uploads not complete AND queue is empty
+    return !batch.uploadsComplete && batch.videoQueue.length === 0;
+  }
+
+  // Check if batch is done (uploads complete and queue empty)
+  isBatchDone(batchId: string): boolean {
+    const batch = this.batches.get(batchId);
+    if (!batch) return true;
+    return batch.uploadsComplete && batch.videoQueue.length === 0;
   }
 
   getBatch(batchId: string): BatchJob | undefined {

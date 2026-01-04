@@ -1248,6 +1248,14 @@
       content: '⏳';
     }
 
+    .batch-video-item.uploading .batch-video-status::before {
+      content: '📤';
+    }
+
+    .batch-video-item.queued .batch-video-status::before {
+      content: '📋';
+    }
+
     .batch-video-item.processing .batch-video-status::before {
       content: '🔄';
     }
@@ -1918,7 +1926,116 @@
       videoInput.value = '';
     });
 
-    // Analyze button - upload and analyze
+    // Upload a single file and return result
+    async function uploadSingleFile(file, onProgress) {
+      return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('video', file);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload/single');
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable && onProgress) {
+            onProgress(e.loaded / e.total);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(JSON.parse(xhr.responseText).error || 'Upload failed'));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.send(formData);
+      });
+    }
+
+    // Process upload queue with concurrency limit
+    async function processUploadQueue(files, batchId, concurrency = 3) {
+      const queue = [...files];
+      const inProgress = new Map(); // file -> { progress: 0-1 }
+      const completed = [];
+      const failed = [];
+
+      const updateOverallProgress = () => {
+        const totalFiles = files.length;
+        const completedCount = completed.length + failed.length;
+        let inProgressSum = 0;
+        for (const info of inProgress.values()) {
+          inProgressSum += info.progress;
+        }
+        const overallProgress = (completedCount + inProgressSum) / totalFiles;
+        progressFill.style.width = `${Math.round(overallProgress * 100)}%`;
+        progressPercent.textContent = `${Math.round(overallProgress * 100)}%`;
+        progressMessage.textContent = `Uploading: ${completedCount}/${totalFiles} complete, ${inProgress.size} in progress`;
+      };
+
+      const uploadNext = async () => {
+        if (queue.length === 0) return;
+
+        const fileInfo = queue.shift();
+        inProgress.set(fileInfo.file.name, { progress: 0 });
+
+        try {
+          const result = await uploadSingleFile(fileInfo.file, (progress) => {
+            inProgress.get(fileInfo.file.name).progress = progress;
+            updateOverallProgress();
+          });
+
+          inProgress.delete(fileInfo.file.name);
+          completed.push({ ...result, duration: fileInfo.duration });
+
+          // Add to batch immediately
+          await fetch(`/api/batch/${batchId}/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              path: result.path,
+              originalName: result.originalName,
+            }),
+          });
+
+          updateOverallProgress();
+        } catch (err) {
+          inProgress.delete(fileInfo.file.name);
+          failed.push({ file: fileInfo.file.name, error: err.message });
+          updateOverallProgress();
+        }
+      };
+
+      // Start initial batch of concurrent uploads
+      const workers = [];
+      for (let i = 0; i < Math.min(concurrency, files.length); i++) {
+        workers.push((async () => {
+          while (queue.length > 0 || inProgress.size > 0) {
+            if (queue.length > 0) {
+              await uploadNext();
+            } else {
+              // Wait a bit for other workers to finish
+              await new Promise(r => setTimeout(r, 50));
+            }
+          }
+        })());
+      }
+
+      // Wait for a short time to let workers start, then run remaining
+      await Promise.race([
+        Promise.all(workers),
+        new Promise(r => setTimeout(r, 100))
+      ]);
+
+      // Continue until all done
+      while (queue.length > 0 || inProgress.size > 0) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      return { completed, failed };
+    }
+
+    // Analyze button - upload and analyze incrementally
     analyzeBtn.addEventListener('click', async () => {
       if (selectedVideos.length === 0) return;
 
@@ -1928,75 +2045,57 @@
         resultsSection.classList.remove('visible');
         timelineSection.classList.remove('visible');
 
+        // Create batch first (before uploading)
+        const createRes = await fetch('/api/batch/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: modelSelect.value,
+            fps: parseInt(fpsSelect.value),
+            expectedCount: selectedVideos.length,
+          }),
+        });
+        const batchData = await createRes.json();
+        if (batchData.error) throw new Error(batchData.error);
+
+        currentBatchId = batchData.batchId;
+
+        // Show batch progress section with uploading placeholders
+        document.getElementById('batchProgressSection').classList.add('visible');
+        initBatchVideoList(selectedVideos.map(v => ({
+          path: null,  // Not uploaded yet
+          name: v.file.name,
+          size: v.file.size,
+          duration: v.duration,
+          status: 'uploading'
+        })));
+
+        // Start listening to batch progress (analysis will start as videos are added)
+        listenToBatchProgress(batchData.batchId);
+
         // Show upload progress
         progressSection.classList.add('visible');
         progressMessage.textContent = 'Uploading videos...';
         progressFill.style.width = '0%';
         progressPercent.textContent = '0%';
 
-        // Upload files
-        const formData = new FormData();
-        selectedVideos.forEach(v => formData.append('videos', v.file));
+        // Upload files incrementally with concurrency limit of 3
+        const uploadResults = await processUploadQueue(selectedVideos, batchData.batchId, 3);
 
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/upload');
-
-        // Track upload progress
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 100);
-            progressFill.style.width = `${pct}%`;
-            progressPercent.textContent = `${pct}%`;
-          }
-        };
-
-        const uploadResult = await new Promise((resolve, reject) => {
-          xhr.onload = () => {
-            if (xhr.status === 200) {
-              resolve(JSON.parse(xhr.responseText));
-            } else {
-              reject(new Error(JSON.parse(xhr.responseText).error || 'Upload failed'));
-            }
-          };
-          xhr.onerror = () => reject(new Error('Upload failed'));
-          xhr.send(formData);
+        // Mark uploads complete so batch processor knows to finish
+        await fetch(`/api/batch/${batchData.batchId}/complete`, {
+          method: 'POST',
         });
 
         progressSection.classList.remove('visible');
 
-        // Start batch analysis - include original names
-        const videoData = uploadResult.files.map(f => ({
-          path: f.path,
-          originalName: f.originalName,
-        }));
-
-        document.getElementById('batchProgressSection').classList.add('visible');
-        initBatchVideoList(uploadResult.files.map(f => ({
-          path: f.path,
-          name: f.originalName,
-          size: f.size,
-          duration: selectedVideos.find(v => v.file.name === f.originalName)?.duration || 0
-        })));
-
-        const res = await fetch('/api/batch/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            videos: videoData,
-            model: modelSelect.value,
-            fps: parseInt(fpsSelect.value),
-          }),
-        });
-
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-
-        currentBatchId = data.batchId;
-        listenToBatchProgress(data.batchId);
-
         // Clear selection
         selectedVideos = [];
         renderSelectedVideos();
+
+        if (uploadResults.failed.length > 0) {
+          console.warn('Some uploads failed:', uploadResults.failed);
+        }
       } catch (err) {
         showError(err.message);
         analyzeBtn.disabled = false;
@@ -2794,14 +2893,17 @@
       list.innerHTML = videos.map(v => {
         const durationStr = formatDuration(v.duration);
         const sizeStr = formatFileSize(v.size);
+        // Use name as identifier, path may not be available yet for incremental uploads
+        const status = v.status || 'pending';
+        const statusText = status === 'uploading' ? 'Uploading...' : '';
         return `
-          <div class="batch-video-item pending" data-path="${v.path}">
+          <div class="batch-video-item ${status}" data-path="${v.path || ''}" data-name="${v.name}">
             <span class="batch-video-status"></span>
             <span class="batch-video-info">
-              <span class="batch-video-name" title="${v.path}">${v.name}</span>
+              <span class="batch-video-name" title="${v.path || v.name}">${v.name}</span>
               <span class="batch-video-meta">${durationStr} · ${sizeStr}</span>
             </span>
-            <span class="batch-video-progress"></span>
+            <span class="batch-video-progress">${statusText}</span>
           </div>
         `;
       }).join('');
@@ -2867,6 +2969,23 @@
       batchEventSource.addEventListener('video_skipped', (e) => {
         const data = JSON.parse(e.data);
         updateBatchVideoStatus(data.path, 'skipped', data.reason);
+      });
+
+      batchEventSource.addEventListener('video_added', (e) => {
+        const data = JSON.parse(e.data);
+        // Update item with path now that upload is complete
+        const item = document.querySelector(`.batch-video-item[data-name="${data.originalName}"]`);
+        if (item) {
+          item.setAttribute('data-path', data.path);
+          item.className = 'batch-video-item queued';
+          item.querySelector('.batch-video-progress').textContent = 'Queued';
+        }
+      });
+
+      batchEventSource.addEventListener('uploads_complete', (e) => {
+        const data = JSON.parse(e.data);
+        // All uploads done, batch will finish when analysis completes
+        console.log('All uploads complete:', data.total, 'videos');
       });
 
       batchEventSource.addEventListener('batch_complete', async (e) => {

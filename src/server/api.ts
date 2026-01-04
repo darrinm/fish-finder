@@ -51,7 +51,7 @@ const upload = multer({
   },
 });
 
-// POST /api/upload - Upload video files
+// POST /api/upload - Upload video files (batch)
 router.post('/upload', upload.array('videos', 50), (req: Request, res: Response) => {
   const files = req.files as Express.Multer.File[];
   if (!files || files.length === 0) {
@@ -66,6 +66,21 @@ router.post('/upload', upload.array('videos', 50), (req: Request, res: Response)
   }));
 
   res.json({ files: uploaded });
+});
+
+// POST /api/upload/single - Upload single video file
+router.post('/upload/single', upload.single('video'), (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: 'No video file uploaded' });
+    return;
+  }
+
+  res.json({
+    originalName: file.originalname,
+    path: file.path,
+    size: file.size,
+  });
 });
 
 // DELETE /api/upload - Clean up uploaded files
@@ -551,7 +566,92 @@ router.post('/bounding-boxes/detect/:filename', async (req: Request, res: Respon
 
 // ============ BATCH ANALYSIS ENDPOINTS ============
 
-// POST /api/batch/analyze - Start batch analysis
+// POST /api/batch/create - Create empty batch for incremental uploads
+router.post('/batch/create', (req: Request, res: Response) => {
+  try {
+    const { model = '3-flash', fps = 1, expectedCount } = req.body;
+
+    const modelConfig = MODEL_ALIASES[model];
+    if (!modelConfig) {
+      res.status(400).json({ error: `Unknown model: ${model}` });
+      return;
+    }
+
+    const batch = jobManager.createEmptyBatch(model, parseFloat(fps) || 1, expectedCount);
+
+    // Start the processor (it will wait for videos to be added)
+    processIncrementalBatch(batch.batchId, modelConfig);
+
+    res.json({
+      batchId: batch.batchId,
+      status: 'created',
+      model,
+      fps: batch.fps,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/batch/:batchId/add - Add video to batch
+router.post('/batch/:batchId/add', (req: Request, res: Response) => {
+  try {
+    const { batchId } = req.params;
+    const { path: videoPath, originalName } = req.body;
+
+    if (!videoPath) {
+      res.status(400).json({ error: 'Missing path' });
+      return;
+    }
+
+    const batch = jobManager.getBatch(batchId);
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+      return;
+    }
+
+    const added = jobManager.addVideoToBatch(batchId, videoPath, originalName || basename(videoPath));
+    if (!added) {
+      res.status(400).json({ error: 'Cannot add video to completed or cancelled batch' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      queueLength: batch.videoQueue.length,
+      total: batch.videos.length,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/batch/:batchId/complete - Mark all uploads as complete
+router.post('/batch/:batchId/complete', (req: Request, res: Response) => {
+  try {
+    const { batchId } = req.params;
+
+    const batch = jobManager.getBatch(batchId);
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+      return;
+    }
+
+    jobManager.markUploadsComplete(batchId);
+
+    res.json({
+      success: true,
+      total: batch.videos.length,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/batch/analyze - Start batch analysis (legacy - all videos upfront)
 router.post('/batch/analyze', async (req: Request, res: Response) => {
   try {
     const { videos, model = '3-flash', fps = 1 } = req.body;
@@ -681,6 +781,98 @@ async function processBatchVideos(
   }
 }
 
+// Background incremental batch processing function (processes videos as they're added)
+async function processIncrementalBatch(
+  batchId: string,
+  modelConfig: { model: string; provider: string }
+): Promise<void> {
+  const batch = jobManager.getBatch(batchId);
+  if (!batch) return;
+
+  // Get already-analyzed videos to skip duplicates (check by original name)
+  const history = await getHistory();
+  const analyzedNames = new Set(history.map(a => basename(a.video)));
+
+  // Process loop: continue until batch is done or cancelled
+  while (!jobManager.isBatchCancelled(batchId)) {
+    // Get next video from queue
+    const nextVideo = jobManager.getNextQueuedVideo(batchId);
+
+    if (!nextVideo) {
+      // Queue empty - check if we should wait or finish
+      if (jobManager.isBatchDone(batchId)) {
+        break; // All uploads complete and queue empty
+      }
+      // Wait for more videos to be added (poll every 100ms)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      continue;
+    }
+
+    const { path: videoPath, originalName } = nextVideo;
+
+    // Skip already-analyzed videos (by original name)
+    if (analyzedNames.has(originalName)) {
+      jobManager.skipBatchVideo(batchId, videoPath, 'Already analyzed');
+      continue;
+    }
+
+    const jobId = uuidv4();
+    jobManager.startBatchVideo(batchId, videoPath, jobId);
+
+    try {
+      const options: AnalyzeOptions = {
+        output: 'json',
+        extractFrames: join(__dirname, '../../frames'),
+        model: modelConfig.model,
+        verbose: false,
+        fps: batch.fps,
+        provider: modelConfig.provider as Provider,
+      };
+
+      // Update progress
+      jobManager.updateBatchVideoProgress(batchId, videoPath, {
+        stage: 'analyzing',
+        percent: 30,
+        message: 'Analyzing with AI...',
+      });
+
+      const result = await analyzeVideoFile(videoPath, options);
+
+      // Store original filename for display, keep upload path for playback
+      result.video = originalName;
+      result.videoPath = `/uploads/${basename(videoPath)}`;
+
+      // Extract recording date from video metadata
+      const recordedAt = await getVideoRecordingDate(videoPath);
+      if (recordedAt) {
+        result.recordedAt = recordedAt;
+      }
+
+      jobManager.updateBatchVideoProgress(batchId, videoPath, {
+        stage: 'extracting',
+        percent: 90,
+        message: 'Saving results...',
+      });
+
+      // Auto-save to history
+      await saveAnalysis(result);
+
+      // Add to analyzed set so we don't re-analyze if added again
+      analyzedNames.add(originalName);
+
+      jobManager.completeBatchVideo(batchId, videoPath, result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Analysis failed';
+      jobManager.failBatchVideo(batchId, videoPath, message);
+    }
+  }
+
+  // Mark batch as complete
+  if (!jobManager.isBatchCancelled(batchId)) {
+    jobManager.completeBatch(batchId);
+  }
+}
+
 // GET /api/batch/:batchId/progress - SSE progress stream
 router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
   const { batchId } = req.params;
@@ -704,6 +896,8 @@ router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
     completed: batch.completed.length,
     failed: batch.failed.length,
     currentIndex: batch.currentIndex,
+    uploadsComplete: batch.uploadsComplete,
+    queueLength: batch.videoQueue.length,
   })}\n\n`);
 
   // If already completed or cancelled
@@ -752,6 +946,14 @@ router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
     res.write(`event: video_skipped\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  const onVideoAdded = (data: unknown) => {
+    res.write(`event: video_added\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const onUploadsComplete = (data: unknown) => {
+    res.write(`event: uploads_complete\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
   const onBatchComplete = (data: unknown) => {
     res.write(`event: batch_complete\ndata: ${JSON.stringify(data)}\n\n`);
     cleanup();
@@ -771,6 +973,8 @@ router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
     jobManager.off(`batch:video_complete:${batchId}`, onVideoComplete);
     jobManager.off(`batch:video_error:${batchId}`, onVideoError);
     jobManager.off(`batch:video_skipped:${batchId}`, onVideoSkipped);
+    jobManager.off(`batch:video_added:${batchId}`, onVideoAdded);
+    jobManager.off(`batch:uploads_complete:${batchId}`, onUploadsComplete);
     jobManager.off(`batch:complete:${batchId}`, onBatchComplete);
     jobManager.off(`batch:cancelled:${batchId}`, onBatchCancelled);
   };
@@ -781,6 +985,8 @@ router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
   jobManager.on(`batch:video_complete:${batchId}`, onVideoComplete);
   jobManager.on(`batch:video_error:${batchId}`, onVideoError);
   jobManager.on(`batch:video_skipped:${batchId}`, onVideoSkipped);
+  jobManager.on(`batch:video_added:${batchId}`, onVideoAdded);
+  jobManager.on(`batch:uploads_complete:${batchId}`, onUploadsComplete);
   jobManager.on(`batch:complete:${batchId}`, onBatchComplete);
   jobManager.on(`batch:cancelled:${batchId}`, onBatchCancelled);
 
