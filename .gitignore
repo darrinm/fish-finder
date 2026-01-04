@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+data/
+frames/
+.DS_Store
+.claude/

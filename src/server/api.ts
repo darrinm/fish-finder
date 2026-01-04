@@ -1,0 +1,705 @@
+import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import { join, dirname, basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { MODEL_ALIASES } from '../models.js';
+import { getVideoFiles } from '../video.js';
+import { analyzeVideoFile } from '../analyzer.js';
+import { jobManager } from './progress.js';
+import {
+  saveAnalysis,
+  getHistory,
+  getAnalysis,
+  deleteAnalysis,
+  clearHistory,
+  getAggregatedSpecies,
+  getStarredFrames,
+  toggleStarFrame,
+  getRotations,
+  setRotation,
+  getAllBoundingBoxes,
+  saveBoundingBoxes,
+} from './storage.js';
+import { detectBoundingBoxes } from '../gemini.js';
+import type { AnalyzeOptions, Provider } from '../types.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+export const router = Router();
+
+// GET /api/models - List available models
+router.get('/models', (_req: Request, res: Response) => {
+  const models = Object.entries(MODEL_ALIASES).map(([id, config]) => ({
+    id,
+    name: id,
+    model: config.model,
+    provider: config.provider,
+  }));
+
+  res.json({ models });
+});
+
+// GET /api/videos - List videos in directory
+router.get('/videos', async (req: Request, res: Response) => {
+  try {
+    const dir = req.query.dir as string;
+    if (!dir) {
+      res.status(400).json({ error: 'Missing dir parameter' });
+      return;
+    }
+
+    const videos = await getVideoFiles(dir);
+    const result = videos.map(path => ({
+      path,
+      name: basename(path),
+    }));
+
+    res.json({ videos: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/analyze - Start analysis job
+router.post('/analyze', async (req: Request, res: Response) => {
+  try {
+    const { videoPath, model, fps = 1, extractFrames = true } = req.body;
+
+    if (!videoPath) {
+      res.status(400).json({ error: 'Missing videoPath' });
+      return;
+    }
+
+    const modelConfig = MODEL_ALIASES[model || '3-flash'];
+    if (!modelConfig) {
+      res.status(400).json({ error: `Unknown model: ${model}` });
+      return;
+    }
+
+    const jobId = uuidv4();
+    const job = jobManager.createJob(jobId);
+
+    // Return job ID immediately
+    res.json({ jobId, status: 'started' });
+
+    // Run analysis in background
+    const options: AnalyzeOptions = {
+      output: 'json',
+      extractFrames: extractFrames ? join(__dirname, '../../frames') : undefined,
+      model: modelConfig.model,
+      verbose: true,
+      fps: parseFloat(fps) || 1,
+      provider: modelConfig.provider as Provider,
+    };
+
+    // Update progress during analysis
+    jobManager.updateProgress(jobId, {
+      stage: 'uploading',
+      percent: 10,
+      message: 'Preparing video for analysis...',
+    });
+
+    try {
+      jobManager.updateProgress(jobId, {
+        stage: 'analyzing',
+        percent: 30,
+        message: `Analyzing with ${model || '3-flash'}...`,
+      });
+
+      const result = await analyzeVideoFile(videoPath, options);
+
+      jobManager.updateProgress(jobId, {
+        stage: 'extracting',
+        percent: 90,
+        message: 'Saving results...',
+      });
+
+      // Auto-save to history
+      await saveAnalysis(result);
+
+      jobManager.completeJob(jobId, result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Analysis failed';
+      jobManager.failJob(jobId, message);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/analyze/:jobId/progress - SSE progress stream
+router.get('/analyze/:jobId/progress', (req: Request, res: Response) => {
+  const { jobId } = req.params;
+  const job = jobManager.getJob(jobId);
+
+  if (!job) {
+    res.status(404).json({ error: 'Job not found' });
+    return;
+  }
+
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Send current state
+  if (job.progress) {
+    res.write(`event: progress\ndata: ${JSON.stringify(job.progress)}\n\n`);
+  }
+
+  if (job.status === 'completed') {
+    res.write(`event: complete\ndata: ${JSON.stringify({ jobId })}\n\n`);
+    res.end();
+    return;
+  }
+
+  if (job.status === 'failed') {
+    res.write(`event: error\ndata: ${JSON.stringify({ message: job.error })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Listen for updates
+  const onProgress = (progress: unknown) => {
+    res.write(`event: progress\ndata: ${JSON.stringify(progress)}\n\n`);
+  };
+
+  const onComplete = () => {
+    res.write(`event: complete\ndata: ${JSON.stringify({ jobId })}\n\n`);
+    cleanup();
+    res.end();
+  };
+
+  const onError = (message: string) => {
+    res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
+    cleanup();
+    res.end();
+  };
+
+  const cleanup = () => {
+    jobManager.off(`progress:${jobId}`, onProgress);
+    jobManager.off(`complete:${jobId}`, onComplete);
+    jobManager.off(`error:${jobId}`, onError);
+  };
+
+  jobManager.on(`progress:${jobId}`, onProgress);
+  jobManager.on(`complete:${jobId}`, onComplete);
+  jobManager.on(`error:${jobId}`, onError);
+
+  // Cleanup on client disconnect
+  req.on('close', cleanup);
+});
+
+// GET /api/analyze/:jobId/result - Get completed result
+router.get('/analyze/:jobId/result', (req: Request, res: Response) => {
+  const { jobId } = req.params;
+  const job = jobManager.getJob(jobId);
+
+  if (!job) {
+    res.status(404).json({ error: 'Job not found' });
+    return;
+  }
+
+  if (job.status === 'completed') {
+    res.json({ status: 'completed', result: job.result });
+  } else if (job.status === 'failed') {
+    res.json({ status: 'failed', error: job.error });
+  } else {
+    res.json({ status: job.status, progress: job.progress });
+  }
+});
+
+// GET /api/history - List all past analyses
+router.get('/history', async (_req: Request, res: Response) => {
+  try {
+    const analyses = await getHistory();
+    res.json({ analyses });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/history/species - Aggregated species counts
+router.get('/history/species', async (_req: Request, res: Response) => {
+  try {
+    const species = await getAggregatedSpecies();
+    res.json({ species });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/history/species/:name/frames - Get all frames for a species
+router.get('/history/species/:name/frames', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const history = await getHistory();
+    const frames: Array<{ url: string; videoName: string; timestamp: number }> = [];
+
+    for (const analysis of history) {
+      const videoName = basename(analysis.video);
+      for (const species of analysis.identifiedSpecies) {
+        if (species.commonName.toLowerCase() === name.toLowerCase()) {
+          if (species.frameFiles) {
+            for (const framePath of species.frameFiles) {
+              const filename = basename(framePath);
+              // Extract timestamp from filename (e.g., GX010167_clownfish_4s.jpg -> 4)
+              const match = filename.match(/_(\d+)s\.jpg$/);
+              const timestamp = match ? parseInt(match[1], 10) : 0;
+              frames.push({
+                url: `/frames/${filename}`,
+                videoName,
+                timestamp,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ frames });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/history/video/:videoPath - Check if video already analyzed
+router.get('/history/video', async (req: Request, res: Response) => {
+  try {
+    const videoPath = req.query.path as string;
+    if (!videoPath) {
+      res.status(400).json({ error: 'Missing path parameter' });
+      return;
+    }
+
+    const history = await getHistory();
+    const existing = history.find(a => a.video === videoPath);
+
+    if (existing) {
+      res.json({ exists: true, analysis: existing });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/history/:id - Get specific analysis
+router.get('/history/:id', async (req: Request, res: Response) => {
+  try {
+    const analysis = await getAnalysis(req.params.id);
+    if (!analysis) {
+      res.status(404).json({ error: 'Analysis not found' });
+      return;
+    }
+    res.json({ analysis });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /api/history/:id - Remove analysis
+router.delete('/history/:id', async (req: Request, res: Response) => {
+  try {
+    const deleted = await deleteAnalysis(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: 'Analysis not found' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /api/history - Clear all history
+router.delete('/history', async (_req: Request, res: Response) => {
+  try {
+    await clearHistory();
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/starred - Get all starred frames
+router.get('/starred', async (_req: Request, res: Response) => {
+  try {
+    const frames = await getStarredFrames();
+    res.json({ frames });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/starred - Toggle star on a frame
+router.post('/starred', async (req: Request, res: Response) => {
+  try {
+    const { filename, speciesName, videoName, timestamp } = req.body;
+
+    if (!filename) {
+      res.status(400).json({ error: 'Missing filename' });
+      return;
+    }
+
+    const starred = await toggleStarFrame(
+      filename,
+      speciesName || '',
+      videoName || '',
+      timestamp || 0
+    );
+
+    res.json({ starred });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /api/frames/:filename - Delete a frame file
+router.delete('/frames/:filename', async (req: Request, res: Response) => {
+  try {
+    const { filename } = req.params;
+    const { unlink } = await import('node:fs/promises');
+    const framePath = join(__dirname, '../../frames', filename);
+
+    await unlink(framePath);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/rotations - Get all frame rotations
+router.get('/rotations', async (_req: Request, res: Response) => {
+  try {
+    const rotations = await getRotations();
+    res.json({ rotations });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/rotations - Set rotation for a frame
+router.post('/rotations', async (req: Request, res: Response) => {
+  try {
+    const { filename, degrees } = req.body;
+
+    if (!filename || degrees === undefined) {
+      res.status(400).json({ error: 'Missing filename or degrees' });
+      return;
+    }
+
+    await setRotation(filename, degrees);
+    res.json({ success: true, degrees });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/bounding-boxes - Get all cached bounding boxes
+router.get('/bounding-boxes', async (_req: Request, res: Response) => {
+  try {
+    const boxes = await getAllBoundingBoxes();
+    res.json({ boxes });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/bounding-boxes/detect/:filename - Detect bounding boxes for a frame
+router.post('/bounding-boxes/detect/:filename', async (req: Request, res: Response) => {
+  try {
+    const { filename } = req.params;
+    const { readFile } = await import('node:fs/promises');
+
+    // Read the frame file
+    const framePath = join(__dirname, '../../frames', filename);
+    const imageBuffer = await readFile(framePath);
+    const imageBase64 = imageBuffer.toString('base64');
+
+    // Parse filename: {videoName}_{speciesName}_{timestamp}s.jpg
+    const match = filename.match(/^(.+?)_(.+)_(\d+)s\.jpg$/i);
+    let speciesHints: string[] = [];
+
+    if (match) {
+      const [, videoName, , timestampStr] = match;
+      const timestamp = parseInt(timestampStr, 10);
+
+      // Look up the analysis for this video to find all species at this timestamp
+      const history = await getHistory();
+      const analysis = history.find(a => basename(a.video).replace(/\.[^.]+$/, '') === videoName);
+
+      if (analysis) {
+        // Find all species visible at this timestamp
+        speciesHints = analysis.identifiedSpecies
+          .filter(s => s.timestamps.some(t => timestamp >= t.start && timestamp <= t.end))
+          .map(s => s.commonName);
+      }
+    }
+
+    // Detect bounding boxes with species hints
+    const boxes = await detectBoundingBoxes(imageBase64, speciesHints);
+
+    // Save to storage
+    await saveBoundingBoxes(filename, boxes);
+
+    res.json({ boxes });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// ============ BATCH ANALYSIS ENDPOINTS ============
+
+// POST /api/batch/analyze - Start batch analysis
+router.post('/batch/analyze', async (req: Request, res: Response) => {
+  try {
+    const { videos, model = '3-flash', fps = 1 } = req.body;
+
+    if (!videos || !Array.isArray(videos) || videos.length === 0) {
+      res.status(400).json({ error: 'Missing or empty videos array' });
+      return;
+    }
+
+    const modelConfig = MODEL_ALIASES[model];
+    if (!modelConfig) {
+      res.status(400).json({ error: `Unknown model: ${model}` });
+      return;
+    }
+
+    // Create batch job
+    const batch = jobManager.createBatch(videos, model, parseFloat(fps) || 1);
+
+    // Return batch ID immediately
+    res.json({ batchId: batch.batchId, status: 'started', totalVideos: videos.length });
+
+    // Process videos in background
+    processBatchVideos(batch.batchId, modelConfig);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// Background batch processing function
+async function processBatchVideos(
+  batchId: string,
+  modelConfig: { model: string; provider: string }
+): Promise<void> {
+  const batch = jobManager.getBatch(batchId);
+  if (!batch) return;
+
+  for (const videoPath of batch.videos) {
+    // Check if batch was cancelled
+    if (jobManager.isBatchCancelled(batchId)) {
+      break;
+    }
+
+    const jobId = uuidv4();
+    jobManager.startBatchVideo(batchId, videoPath, jobId);
+
+    try {
+      const options: AnalyzeOptions = {
+        output: 'json',
+        extractFrames: join(__dirname, '../../frames'),
+        model: modelConfig.model,
+        verbose: false,
+        fps: batch.fps,
+        provider: modelConfig.provider as Provider,
+      };
+
+      // Update progress
+      jobManager.updateBatchVideoProgress(batchId, videoPath, {
+        stage: 'uploading',
+        percent: 10,
+        message: 'Uploading video...',
+      });
+
+      jobManager.updateBatchVideoProgress(batchId, videoPath, {
+        stage: 'analyzing',
+        percent: 30,
+        message: 'Analyzing with AI...',
+      });
+
+      const result = await analyzeVideoFile(videoPath, options);
+
+      jobManager.updateBatchVideoProgress(batchId, videoPath, {
+        stage: 'extracting',
+        percent: 90,
+        message: 'Saving results...',
+      });
+
+      // Auto-save to history
+      await saveAnalysis(result);
+
+      jobManager.completeBatchVideo(batchId, videoPath, result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Analysis failed';
+      jobManager.failBatchVideo(batchId, videoPath, message);
+    }
+  }
+
+  // Mark batch as complete
+  if (!jobManager.isBatchCancelled(batchId)) {
+    jobManager.completeBatch(batchId);
+  }
+}
+
+// GET /api/batch/:batchId/progress - SSE progress stream
+router.get('/batch/:batchId/progress', (req: Request, res: Response) => {
+  const { batchId } = req.params;
+  const batch = jobManager.getBatch(batchId);
+
+  if (!batch) {
+    res.status(404).json({ error: 'Batch not found' });
+    return;
+  }
+
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Send current state
+  res.write(`event: batch_status\ndata: ${JSON.stringify({
+    batchId,
+    status: batch.status,
+    total: batch.videos.length,
+    completed: batch.completed.length,
+    failed: batch.failed.length,
+    currentIndex: batch.currentIndex,
+  })}\n\n`);
+
+  // If already completed or cancelled
+  if (batch.status === 'completed') {
+    res.write(`event: batch_complete\ndata: ${JSON.stringify({
+      completed: batch.completed,
+      failed: batch.failed,
+      total: batch.videos.length,
+    })}\n\n`);
+    res.end();
+    return;
+  }
+
+  if (batch.status === 'cancelled') {
+    res.write(`event: batch_cancelled\ndata: ${JSON.stringify({
+      completed: batch.completed,
+      failed: batch.failed,
+      remaining: batch.videos.length - batch.completed.length - batch.failed.length,
+    })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Listen for updates
+  const onVideoStart = (data: unknown) => {
+    res.write(`event: video_start\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const onVideoProgress = (data: unknown) => {
+    res.write(`event: video_progress\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const onBatchProgress = (data: unknown) => {
+    res.write(`event: batch_progress\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const onVideoComplete = (data: unknown) => {
+    res.write(`event: video_complete\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const onVideoError = (data: unknown) => {
+    res.write(`event: video_error\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const onBatchComplete = (data: unknown) => {
+    res.write(`event: batch_complete\ndata: ${JSON.stringify(data)}\n\n`);
+    cleanup();
+    res.end();
+  };
+
+  const onBatchCancelled = (data: unknown) => {
+    res.write(`event: batch_cancelled\ndata: ${JSON.stringify(data)}\n\n`);
+    cleanup();
+    res.end();
+  };
+
+  const cleanup = () => {
+    jobManager.off(`batch:video_start:${batchId}`, onVideoStart);
+    jobManager.off(`batch:video_progress:${batchId}`, onVideoProgress);
+    jobManager.off(`batch:progress:${batchId}`, onBatchProgress);
+    jobManager.off(`batch:video_complete:${batchId}`, onVideoComplete);
+    jobManager.off(`batch:video_error:${batchId}`, onVideoError);
+    jobManager.off(`batch:complete:${batchId}`, onBatchComplete);
+    jobManager.off(`batch:cancelled:${batchId}`, onBatchCancelled);
+  };
+
+  jobManager.on(`batch:video_start:${batchId}`, onVideoStart);
+  jobManager.on(`batch:video_progress:${batchId}`, onVideoProgress);
+  jobManager.on(`batch:progress:${batchId}`, onBatchProgress);
+  jobManager.on(`batch:video_complete:${batchId}`, onVideoComplete);
+  jobManager.on(`batch:video_error:${batchId}`, onVideoError);
+  jobManager.on(`batch:complete:${batchId}`, onBatchComplete);
+  jobManager.on(`batch:cancelled:${batchId}`, onBatchCancelled);
+
+  // Cleanup on client disconnect
+  req.on('close', cleanup);
+});
+
+// GET /api/batch/:batchId - Get batch status
+router.get('/batch/:batchId', (req: Request, res: Response) => {
+  const { batchId } = req.params;
+  const batch = jobManager.getBatch(batchId);
+
+  if (!batch) {
+    res.status(404).json({ error: 'Batch not found' });
+    return;
+  }
+
+  res.json({
+    batchId: batch.batchId,
+    status: batch.status,
+    videos: batch.videos,
+    completed: batch.completed,
+    failed: batch.failed,
+    currentIndex: batch.currentIndex,
+    startedAt: batch.startedAt,
+    completedAt: batch.completedAt,
+  });
+});
+
+// DELETE /api/batch/:batchId - Cancel batch
+router.delete('/batch/:batchId', (req: Request, res: Response) => {
+  const { batchId } = req.params;
+
+  const cancelled = jobManager.cancelBatch(batchId);
+
+  if (cancelled) {
+    res.json({ success: true, message: 'Batch cancelled' });
+  } else {
+    const batch = jobManager.getBatch(batchId);
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+    } else {
+      res.status(400).json({ error: `Cannot cancel batch in ${batch.status} state` });
+    }
+  }
+});

@@ -1,0 +1,3 @@
+#!/bin/bash
+cd /Users/darrin/src/fish-finder
+node dist/index.js "$@"

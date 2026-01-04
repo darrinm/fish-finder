@@ -1,0 +1,2523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fish Finder</title>
+  <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --text-primary: #eee;
+      --text-secondary: #aaa;
+      --accent: #00d4ff;
+      --accent-hover: #00b8e6;
+      --success: #4ade80;
+      --warning: #fbbf24;
+      --error: #ef4444;
+      --border: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      padding: 1rem;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar h2 {
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    .species-list {
+      list-style: none;
+      margin-bottom: 1.5rem;
+    }
+
+    .species-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .species-item:hover {
+      background: var(--bg-card);
+    }
+
+    .species-count {
+      background: var(--accent);
+      color: var(--bg-primary);
+      padding: 0.125rem 0.5rem;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .history-item {
+      padding: 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid transparent;
+    }
+
+    .history-item:hover {
+      border-color: var(--accent);
+    }
+
+    .history-item.active {
+      border-color: var(--accent);
+      background: rgba(0, 212, 255, 0.1);
+    }
+
+    .history-item-name {
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-item-meta {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .clear-btn {
+      width: 100%;
+      padding: 0.5rem;
+      background: transparent;
+      border: 1px solid var(--error);
+      color: var(--error);
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+
+    .clear-btn:hover {
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Controls */
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .control-group {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+    }
+
+    .control-group h3 {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .file-label {
+      display: block;
+      padding: 0.75rem 1rem;
+      background: var(--bg-card);
+      border: 2px dashed var(--border);
+      border-radius: 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .file-label:hover {
+      border-color: var(--accent);
+    }
+
+    .file-label.has-file {
+      border-style: solid;
+      border-color: var(--success);
+    }
+
+    .selected-file {
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .video-preview {
+      margin-top: 0.75rem;
+      max-width: 100%;
+      border-radius: 6px;
+      display: none;
+    }
+
+    .video-preview.visible {
+      display: block;
+    }
+
+    select, input[type="number"], input[type="text"].path-input {
+      width: 100%;
+      padding: 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .path-input {
+      font-family: monospace;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .analyze-btn {
+      width: 100%;
+      padding: 0.75rem 1.5rem;
+      background: var(--accent);
+      color: var(--bg-primary);
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.75rem;
+      transition: background 0.2s;
+    }
+
+    .analyze-btn:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .analyze-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Progress */
+    .progress-section {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+
+    .progress-section.visible {
+      display: block;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: var(--bg-card);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.3s;
+    }
+
+    .progress-text {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    /* Timeline */
+    .timeline-section {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+
+    .timeline-section.visible {
+      display: block;
+    }
+
+    .timeline-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .timeline-header h3 {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .timeline-container {
+      position: relative;
+      height: 80px;
+      background: var(--bg-card);
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+    }
+
+    .timeline-track {
+      position: absolute;
+      height: 20px;
+      border-radius: 3px;
+      font-size: 0.625rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--bg-primary);
+      font-weight: 600;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .timeline-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.75rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+
+    /* Results */
+    .results-section {
+      display: none;
+    }
+
+    .results-section.visible {
+      display: block;
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .results-header h2 {
+      font-size: 1.25rem;
+    }
+
+    .species-count-badge {
+      background: var(--accent);
+      color: var(--bg-primary);
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .species-card {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-left: 4px solid var(--accent);
+    }
+
+    .species-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+
+    .species-name {
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+
+    a.species-name:hover {
+      color: var(--accent) !important;
+    }
+
+    .species-scientific {
+      font-style: italic;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .confidence-badge {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .confidence-high {
+      background: rgba(74, 222, 128, 0.2);
+      color: var(--success);
+    }
+
+    .confidence-medium {
+      background: rgba(251, 191, 36, 0.2);
+      color: var(--warning);
+    }
+
+    .confidence-low {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--error);
+    }
+
+    .species-details {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    .species-details p {
+      margin-bottom: 0.25rem;
+    }
+
+    .species-details strong {
+      color: var(--text-primary);
+    }
+
+    .frame-gallery {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+
+    .frame-thumb {
+      width: 80px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .frame-thumb:hover {
+      border-color: var(--accent);
+    }
+
+    .frame-thumb.broken {
+      display: none;
+    }
+
+    .summary-section {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+    }
+
+    .summary-section h3 {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Lightbox */
+    .lightbox {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1100;
+    }
+
+    .lightbox.visible {
+      display: flex;
+    }
+
+    .lightbox img {
+      max-width: 90vw;
+      max-height: 85vh;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 2rem;
+      cursor: pointer;
+    }
+
+    .lightbox-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(0, 0, 0, 0.5);
+      border: none;
+      color: white;
+      font-size: 3rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .lightbox-nav:hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    .lightbox-prev {
+      left: 1rem;
+    }
+
+    .lightbox-next {
+      right: 1rem;
+    }
+
+    .lightbox-counter {
+      position: absolute;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.6);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      display: none;
+    }
+
+    .lightbox-header {
+      position: absolute;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.25rem;
+      font-weight: 600;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .lightbox-delete {
+      position: absolute;
+      top: 1rem;
+      right: 4rem;
+      background: none;
+      border: none;
+      color: #888;
+      padding: 0.5rem;
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .lightbox-delete:hover {
+      color: var(--error);
+    }
+
+    .lightbox-star {
+      position: absolute;
+      top: 1rem;
+      right: 6.5rem;
+      background: none;
+      border: none;
+      color: #888;
+      padding: 0.5rem;
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .lightbox-star:hover,
+    .lightbox-star.starred {
+      color: var(--warning);
+    }
+
+    .lightbox-rotate {
+      position: absolute;
+      top: 1rem;
+      right: 9rem;
+      background: none;
+      border: none;
+      color: #888;
+      padding: 0.5rem;
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .lightbox-rotate:hover {
+      color: var(--accent);
+    }
+
+    .lightbox-detect {
+      position: absolute;
+      top: 1rem;
+      right: 11.5rem;
+      background: none;
+      border: none;
+      color: #888;
+      padding: 0.5rem;
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .lightbox-detect:hover {
+      color: var(--accent);
+    }
+
+    .lightbox-detect:disabled {
+      cursor: wait;
+    }
+
+    .lightbox-detect.has-boxes {
+      color: var(--success);
+    }
+
+    /* Bounding box container */
+    .lightbox-image-container {
+      position: relative;
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .bounding-box {
+      position: absolute;
+      border: 3px solid #00ff88;
+      background: rgba(0, 255, 136, 0.15);
+      pointer-events: none;
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.8);
+      border-radius: 4px;
+    }
+
+    .bounding-box-label {
+      position: absolute;
+      top: -1.4rem;
+      left: 0;
+      background: #00ff88;
+      color: #000;
+      padding: 0.1rem 0.4rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      border-radius: 3px;
+      white-space: nowrap;
+      transform-origin: center center;
+    }
+
+    .lightbox-image-container.boxes-hidden .bounding-box {
+      display: none;
+    }
+
+    .lightbox-image-container {
+      cursor: pointer;
+    }
+
+    /* Gallery modal */
+    .gallery-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      display: none;
+      flex-direction: column;
+      z-index: 1000;
+      padding: 1rem;
+    }
+
+    .gallery-modal.visible {
+      display: flex;
+    }
+
+    .gallery-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .gallery-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .gallery-close {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 2rem;
+      cursor: pointer;
+    }
+
+    .gallery-grid {
+      flex: 1;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 250px));
+      gap: 1rem;
+      justify-content: start;
+      align-content: start;
+      align-items: start;
+    }
+
+    .gallery-item {
+      position: relative;
+      cursor: pointer;
+      height: fit-content;
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .gallery-item:hover img {
+      border-color: var(--accent);
+    }
+
+    .gallery-item-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      border-radius: 0 0 4px 4px;
+    }
+
+    /* Already analyzed banner */
+    .already-analyzed {
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid var(--warning);
+      color: var(--warning);
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      display: none;
+    }
+
+    .already-analyzed.visible {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .already-analyzed button {
+      background: var(--warning);
+      color: var(--bg-primary);
+      border: none;
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    /* Star button */
+    .star-btn {
+      position: absolute;
+      top: 0.25rem;
+      right: 0.25rem;
+      background: rgba(0, 0, 0, 0.6);
+      border: none;
+      padding: 0.25rem 0.4rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .star-btn:hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    .star-btn.starred {
+      color: var(--warning);
+      opacity: 1;
+    }
+
+    .star-btn:not(.starred) {
+      color: #666;
+    }
+
+    /* Show star on hover of parent */
+    .gallery-item:hover .star-btn,
+    .frame-gallery > div:hover .star-btn {
+      opacity: 1;
+    }
+
+    /* Starred frames section */
+    .starred-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .starred-frames {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .starred-frame {
+      position: relative;
+      width: 60px;
+      height: 45px;
+    }
+
+    .starred-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid var(--warning);
+    }
+
+    /* Error message */
+    .error-message {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--error);
+      color: var(--error);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      display: none;
+    }
+
+    .error-message.visible {
+      display: block;
+    }
+
+    /* Batch Analysis Styles */
+    .batch-section {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+
+    .batch-section.visible {
+      display: block;
+    }
+
+    .batch-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .batch-header h3 {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .batch-controls {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .batch-controls button {
+      padding: 0.5rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    .batch-controls button:hover {
+      border-color: var(--accent);
+    }
+
+    .batch-controls button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .batch-controls button.primary {
+      background: var(--accent);
+      color: var(--bg-primary);
+      border-color: var(--accent);
+    }
+
+    .batch-controls button.primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .batch-controls button.danger {
+      background: var(--error);
+      border-color: var(--error);
+    }
+
+    .video-checklist {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-card);
+    }
+
+    .video-checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .video-checkbox-item:last-child {
+      border-bottom: none;
+    }
+
+    .video-checkbox-item:hover {
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    .video-checkbox-item input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    .video-checkbox-item label {
+      flex: 1;
+      cursor: pointer;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .video-checkbox-item.analyzed {
+      color: var(--text-secondary);
+    }
+
+    .video-checkbox-item.analyzed::after {
+      content: '✓';
+      color: var(--success);
+      margin-left: 0.5rem;
+    }
+
+    /* Batch Progress */
+    .batch-progress-section {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+
+    .batch-progress-section.visible {
+      display: block;
+    }
+
+    .batch-progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .batch-progress-header h3 {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .batch-overall-progress {
+      margin-bottom: 1rem;
+    }
+
+    .batch-overall-bar {
+      height: 8px;
+      background: var(--bg-card);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.25rem;
+    }
+
+    .batch-overall-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.3s;
+    }
+
+    .batch-overall-text {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .batch-video-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .batch-video-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 4px;
+      margin-bottom: 0.25rem;
+      background: var(--bg-card);
+    }
+
+    .batch-video-status {
+      font-size: 1rem;
+      width: 1.5rem;
+      text-align: center;
+    }
+
+    .batch-video-name {
+      flex: 1;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .batch-video-progress {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .batch-video-item.pending .batch-video-status::before {
+      content: '⏳';
+    }
+
+    .batch-video-item.processing .batch-video-status::before {
+      content: '🔄';
+    }
+
+    .batch-video-item.completed .batch-video-status::before {
+      content: '✅';
+    }
+
+    .batch-video-item.failed .batch-video-status::before {
+      content: '❌';
+    }
+
+    .batch-video-item.processing {
+      border: 1px solid var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="starred-section" id="starredSection" style="display: none;">
+        <h2>Starred Frames</h2>
+        <div class="starred-frames" id="starredFrames"></div>
+      </div>
+
+      <h2>All Species</h2>
+      <ul class="species-list" id="speciesList">
+        <li class="empty-state" style="padding: 1rem; font-size: 0.875rem;">
+          No species identified yet
+        </li>
+      </ul>
+
+      <h2>Past Analyses</h2>
+      <div id="historyList">
+        <div class="empty-state" style="padding: 1rem; font-size: 0.875rem;">
+          No analyses yet
+        </div>
+      </div>
+
+      <button class="clear-btn" id="clearHistoryBtn" style="display: none;">
+        Clear All History
+      </button>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <header class="header">
+        <h1>Fish Finder</h1>
+      </header>
+
+      <div class="error-message" id="errorMessage"></div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <div class="control-group">
+          <h3>Video Selection</h3>
+          <input type="text" id="videoPathInput" class="path-input"
+                 placeholder="Enter video path or drag & drop"
+                 value="/Users/darrin/Pictures/HERO12 Black/">
+          <div class="file-input-wrapper">
+            <input type="file" id="videoInput" class="file-input" accept="video/*">
+            <label for="videoInput" class="file-label" id="fileLabel">
+              Or click to browse
+            </label>
+          </div>
+          <div class="already-analyzed" id="alreadyAnalyzed">
+            <span>This video was already analyzed</span>
+            <button onclick="loadExistingAnalysis()">View Results</button>
+          </div>
+          <video id="videoPreview" class="video-preview" controls></video>
+        </div>
+
+        <div class="control-group">
+          <h3>Analysis Options</h3>
+          <label>
+            <select id="modelSelect">
+              <option value="2.5-flash">Gemini 2.5 Flash</option>
+            </select>
+          </label>
+          <label>
+            <select id="fpsSelect">
+              <option value="1">1 FPS (faster)</option>
+              <option value="2">2 FPS</option>
+              <option value="5">5 FPS (detailed)</option>
+            </select>
+          </label>
+          <div class="checkbox-group">
+            <input type="checkbox" id="extractFrames" checked>
+            <label for="extractFrames">Extract frames</label>
+          </div>
+          <button class="analyze-btn" id="analyzeBtn" disabled>
+            Analyze Video
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-section" id="progressSection">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <div class="progress-text">
+          <span id="progressMessage">Preparing...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+      </div>
+
+      <!-- Batch Video Selection -->
+      <div class="batch-section" id="batchSection">
+        <div class="batch-header">
+          <h3>Batch Analysis</h3>
+          <span id="batchSelectedCount">0 selected</span>
+        </div>
+        <div class="batch-controls">
+          <button onclick="loadVideosForBatch()">Load Videos from Directory</button>
+          <button onclick="selectAllVideos()">Select All</button>
+          <button onclick="selectNoneVideos()">Select None</button>
+          <button class="primary" id="startBatchBtn" onclick="startBatchAnalysis()" disabled>
+            Analyze Selected
+          </button>
+        </div>
+        <div class="video-checklist" id="videoChecklist">
+          <div style="padding: 1rem; text-align: center; color: var(--text-secondary);">
+            Click "Load Videos" to scan directory
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Progress -->
+      <div class="batch-progress-section" id="batchProgressSection">
+        <div class="batch-progress-header">
+          <h3>Batch Progress</h3>
+          <button class="danger" onclick="cancelBatchAnalysis()">Cancel</button>
+        </div>
+        <div class="batch-overall-progress">
+          <div class="batch-overall-bar">
+            <div class="batch-overall-fill" id="batchOverallFill" style="width: 0%"></div>
+          </div>
+          <div class="batch-overall-text">
+            <span id="batchOverallText">0 / 0 videos</span>
+          </div>
+        </div>
+        <div class="batch-video-list" id="batchVideoList"></div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="timeline-section" id="timelineSection">
+        <div class="timeline-header">
+          <h3>Timeline</h3>
+          <span id="durationText">Duration: 0:00</span>
+        </div>
+        <div class="timeline-container" id="timelineContainer"></div>
+        <div class="timeline-legend" id="timelineLegend"></div>
+      </div>
+
+      <!-- Results -->
+      <div class="results-section" id="resultsSection">
+        <div class="results-header">
+          <h2>Results</h2>
+          <span class="species-count-badge" id="speciesCountBadge">0 species</span>
+        </div>
+        <div id="speciesCards"></div>
+        <div class="summary-section" id="summarySection">
+          <h3>Summary</h3>
+          <p id="summaryText"></p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox">
+    <div class="lightbox-header" id="lightboxHeader"></div>
+    <button class="lightbox-detect" id="lightboxDetect" onclick="detectCurrentBoundingBoxes()" title="Detect species location">📍</button>
+    <button class="lightbox-rotate" onclick="rotateCurrentFrame()">⟳</button>
+    <button class="lightbox-star" id="lightboxStar" onclick="toggleLightboxStar()">☆</button>
+    <button class="lightbox-delete" onclick="deleteCurrentFrame()">🗑</button>
+    <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+    <button class="lightbox-nav lightbox-prev" id="lightboxPrev" onclick="lightboxPrev()">&#8249;</button>
+    <div class="lightbox-image-container" id="lightboxImageContainer" onclick="toggleBoundingBoxVisibility()">
+      <img id="lightboxImg" src="" alt="Full size frame">
+    </div>
+    <button class="lightbox-nav lightbox-next" id="lightboxNext" onclick="lightboxNext()">&#8250;</button>
+    <div class="lightbox-counter" id="lightboxCounter">1 / 1</div>
+  </div>
+
+  <!-- Gallery Modal -->
+  <div class="gallery-modal" id="galleryModal">
+    <div class="gallery-header">
+      <h2 class="gallery-title" id="galleryTitle">Species Frames</h2>
+      <button class="gallery-close" onclick="closeGallery()">&times;</button>
+    </div>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+
+  <script>
+    // State
+    let selectedVideoPath = null;
+    let currentJobId = null;
+    let currentResult = null;
+
+    // Colors for species in timeline
+    const SPECIES_COLORS = [
+      '#00d4ff', '#ff6b6b', '#4ade80', '#fbbf24', '#a78bfa',
+      '#f472b6', '#34d399', '#fb923c', '#60a5fa', '#e879f9'
+    ];
+
+    // DOM elements
+    const videoInput = document.getElementById('videoInput');
+    const videoPathInput = document.getElementById('videoPathInput');
+    const fileLabel = document.getElementById('fileLabel');
+    const videoPreview = document.getElementById('videoPreview');
+    const modelSelect = document.getElementById('modelSelect');
+    const fpsSelect = document.getElementById('fpsSelect');
+    const extractFrames = document.getElementById('extractFrames');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const progressSection = document.getElementById('progressSection');
+    const progressFill = document.getElementById('progressFill');
+    const progressMessage = document.getElementById('progressMessage');
+    const progressPercent = document.getElementById('progressPercent');
+    const timelineSection = document.getElementById('timelineSection');
+    const resultsSection = document.getElementById('resultsSection');
+    const speciesCards = document.getElementById('speciesCards');
+    const errorMessage = document.getElementById('errorMessage');
+    const speciesList = document.getElementById('speciesList');
+    const historyList = document.getElementById('historyList');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+    // State for starred frames, rotations, and bounding boxes
+    let starredFilenames = new Set();
+    let frameRotations = {};
+    let frameBoundingBoxes = {};
+
+    // Initialize
+    async function init() {
+      await loadModels();
+      await loadRotations();
+      await loadBoundingBoxes();
+      await loadHistory();
+      await loadAggregatedSpecies();
+      await loadStarredFrames();
+    }
+
+    // Load bounding boxes
+    async function loadBoundingBoxes() {
+      try {
+        const res = await fetch('/api/bounding-boxes');
+        const data = await res.json();
+        frameBoundingBoxes = data.boxes || {};
+      } catch (err) {
+        console.error('Failed to load bounding boxes:', err);
+      }
+    }
+
+    // Load frame rotations
+    async function loadRotations() {
+      try {
+        const res = await fetch('/api/rotations');
+        const data = await res.json();
+        frameRotations = data.rotations || {};
+      } catch (err) {
+        console.error('Failed to load rotations:', err);
+      }
+    }
+
+    // Get rotation for a frame
+    function getRotation(filename) {
+      return frameRotations[filename] || 0;
+    }
+
+    // Apply rotation to an image element
+    function applyRotation(img, filename) {
+      const deg = getRotation(filename);
+      img.style.transform = deg ? `rotate(${deg}deg)` : '';
+    }
+
+    // Load starred frames
+    async function loadStarredFrames() {
+      try {
+        const res = await fetch('/api/starred');
+        const data = await res.json();
+
+        starredFilenames = new Set(data.frames.map(f => f.filename));
+
+        const section = document.getElementById('starredSection');
+        const container = document.getElementById('starredFrames');
+
+        if (data.frames.length === 0) {
+          section.style.display = 'none';
+        } else {
+          section.style.display = 'block';
+          const starredUrls = data.frames.map(f => `/frames/${f.filename}`);
+          const starredTitles = data.frames.map(f => f.speciesName);
+          window.currentStarredFrames = starredUrls;
+          window.currentStarredTitles = starredTitles;
+          container.innerHTML = data.frames.map((f, idx) => {
+            const rot = getRotation(f.filename);
+            const style = rot ? `style="transform: rotate(${rot}deg)"` : '';
+            return `
+              <div class="starred-frame" title="${f.speciesName}">
+                <img src="/frames/${f.filename}" onclick="openLightboxStarred(${idx})" alt="${f.speciesName}" ${style}>
+              </div>
+            `;
+          }).join('');
+        }
+      } catch (err) {
+        console.error('Failed to load starred frames:', err);
+      }
+    }
+
+    // Toggle star on a frame
+    async function toggleStar(filename, speciesName, videoName, timestamp, buttonEl) {
+      try {
+        const res = await fetch('/api/starred', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, speciesName, videoName, timestamp }),
+        });
+        const data = await res.json();
+
+        if (data.starred) {
+          starredFilenames.add(filename);
+          buttonEl.classList.add('starred');
+          buttonEl.textContent = '★';
+        } else {
+          starredFilenames.delete(filename);
+          buttonEl.classList.remove('starred');
+          buttonEl.textContent = '☆';
+        }
+
+        // Update lightbox star state if open
+        if (document.getElementById('lightbox').classList.contains('visible')) {
+          updateLightboxStarState();
+        }
+
+        // Refresh all star buttons and sidebar
+        refreshAllStarButtons();
+        await loadStarredFrames();
+      } catch (err) {
+        console.error('Failed to toggle star:', err);
+      }
+    }
+
+    // Load available models
+    async function loadModels() {
+      try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+
+        modelSelect.innerHTML = data.models.map(m =>
+          `<option value="${m.id}">${m.id} (${m.provider})</option>`
+        ).join('');
+      } catch (err) {
+        console.error('Failed to load models:', err);
+      }
+    }
+
+    // Load history
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const data = await res.json();
+
+        if (data.analyses.length === 0) {
+          historyList.innerHTML = `
+            <div class="empty-state" style="padding: 1rem; font-size: 0.875rem;">
+              No analyses yet
+            </div>
+          `;
+          clearHistoryBtn.style.display = 'none';
+        } else {
+          historyList.innerHTML = data.analyses
+            .slice()
+            .sort((a, b) => {
+              const nameA = a.video.split('/').pop().toLowerCase();
+              const nameB = b.video.split('/').pop().toLowerCase();
+              return nameA.localeCompare(nameB);
+            })
+            .map(a => `
+            <div class="history-item" data-id="${a.id}" onclick="loadAnalysis('${a.id}')">
+              <div class="history-item-name">${a.video.split('/').pop()}</div>
+              <div class="history-item-meta">
+                ${new Date(a.analyzedAt).toLocaleDateString()} &bull;
+                ${a.identifiedSpecies.length} species
+              </div>
+            </div>
+          `).join('');
+          clearHistoryBtn.style.display = 'block';
+        }
+      } catch (err) {
+        console.error('Failed to load history:', err);
+      }
+    }
+
+    // Load aggregated species
+    async function loadAggregatedSpecies() {
+      try {
+        const res = await fetch('/api/history/species');
+        const data = await res.json();
+
+        if (data.species.length === 0) {
+          speciesList.innerHTML = `
+            <li class="empty-state" style="padding: 1rem; font-size: 0.875rem;">
+              No species identified yet
+            </li>
+          `;
+        } else {
+          speciesList.innerHTML = data.species.map(s => `
+            <li class="species-item" onclick="showSpeciesFrames('${s.commonName.replace(/'/g, "\\'")}')">
+              <span>${s.commonName}</span>
+              <span class="species-count">${s.videoCount}</span>
+            </li>
+          `).join('');
+        }
+      } catch (err) {
+        console.error('Failed to load species:', err);
+      }
+    }
+
+    // Load specific analysis
+    async function loadAnalysis(id) {
+      try {
+        const res = await fetch(`/api/history/${id}`);
+        const data = await res.json();
+
+        if (data.analysis) {
+          currentResult = data.analysis;
+          displayResults(data.analysis);
+
+          // Highlight active history item
+          document.querySelectorAll('.history-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.id === id);
+          });
+        }
+      } catch (err) {
+        showError('Failed to load analysis');
+      }
+    }
+
+    // Path input change
+    videoPathInput.addEventListener('input', () => {
+      const path = videoPathInput.value.trim();
+      selectedVideoPath = path;
+      analyzeBtn.disabled = !path || !path.match(/\.(mp4|mov|avi|mkv|webm)$/i);
+
+      // Check if already analyzed
+      if (path.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
+        checkVideoAnalyzed(path);
+      } else {
+        document.getElementById('alreadyAnalyzed').classList.remove('visible');
+      }
+    });
+
+    // Initialize from default path
+    selectedVideoPath = videoPathInput.value.trim();
+
+    // File selection - appends filename to current path
+    videoInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        // Get the directory from current path input
+        let dir = videoPathInput.value.trim();
+        if (!dir.endsWith('/')) {
+          // If it's a file path, get the directory
+          dir = dir.substring(0, dir.lastIndexOf('/') + 1);
+        }
+
+        selectedVideoPath = dir + file.name;
+        videoPathInput.value = selectedVideoPath;
+
+        fileLabel.classList.add('has-file');
+        fileLabel.textContent = file.name;
+        analyzeBtn.disabled = false;
+
+        // Show video preview
+        videoPreview.src = URL.createObjectURL(file);
+        videoPreview.classList.add('visible');
+
+        // Check if already analyzed
+        checkVideoAnalyzed(selectedVideoPath);
+      }
+    });
+
+    // Analyze button
+    analyzeBtn.addEventListener('click', async () => {
+      if (!selectedVideoPath) return;
+
+      try {
+        analyzeBtn.disabled = true;
+        progressSection.classList.add('visible');
+        errorMessage.classList.remove('visible');
+        resultsSection.classList.remove('visible');
+        timelineSection.classList.remove('visible');
+
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            videoPath: selectedVideoPath,
+            model: modelSelect.value,
+            fps: parseInt(fpsSelect.value),
+            extractFrames: extractFrames.checked,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        currentJobId = data.jobId;
+        listenToProgress(data.jobId);
+      } catch (err) {
+        showError(err.message);
+        analyzeBtn.disabled = false;
+        progressSection.classList.remove('visible');
+      }
+    });
+
+    // Listen to SSE progress
+    function listenToProgress(jobId) {
+      const eventSource = new EventSource(`/api/analyze/${jobId}/progress`);
+
+      eventSource.addEventListener('progress', (e) => {
+        const data = JSON.parse(e.data);
+        updateProgress(data);
+      });
+
+      eventSource.addEventListener('complete', async () => {
+        eventSource.close();
+        progressFill.style.width = '100%';
+        progressMessage.textContent = 'Complete!';
+        progressPercent.textContent = '100%';
+
+        // Fetch result
+        const res = await fetch(`/api/analyze/${jobId}/result`);
+        const data = await res.json();
+
+        if (data.result) {
+          currentResult = data.result;
+          displayResults(data.result);
+          await loadHistory();
+          await loadAggregatedSpecies();
+        }
+
+        analyzeBtn.disabled = false;
+        setTimeout(() => {
+          progressSection.classList.remove('visible');
+        }, 1000);
+      });
+
+      eventSource.addEventListener('error', (e) => {
+        eventSource.close();
+        try {
+          const data = JSON.parse(e.data);
+          showError(data.message || 'Analysis failed');
+        } catch {
+          showError('Analysis failed');
+        }
+        analyzeBtn.disabled = false;
+        progressSection.classList.remove('visible');
+      });
+    }
+
+    // Update progress display
+    function updateProgress(data) {
+      progressFill.style.width = `${data.percent}%`;
+      progressMessage.textContent = data.message;
+      progressPercent.textContent = `${data.percent}%`;
+    }
+
+    // Display results
+    function displayResults(result) {
+      resultsSection.classList.add('visible');
+      timelineSection.classList.add('visible');
+
+      // Update species count
+      document.getElementById('speciesCountBadge').textContent =
+        `${result.identifiedSpecies.length} species`;
+
+      // Render timeline
+      renderTimeline(result);
+
+      // Render species cards
+      speciesCards.innerHTML = result.identifiedSpecies.map((species, i) => {
+        const confidenceClass = species.confidence >= 0.8 ? 'confidence-high' :
+                               species.confidence >= 0.5 ? 'confidence-medium' : 'confidence-low';
+
+        const timestamps = species.timestamps.map(t =>
+          `${formatTime(t.start)}-${formatTime(t.end)}`
+        ).join(', ');
+
+        const videoName = result.video.split('/').pop();
+        const frameUrls = species.frameFiles?.map(f => `/frames/${f.split('/').pop()}`) || [];
+        const framesKey = `speciesFrames_${i}`;
+        window[framesKey] = frameUrls;
+
+        const frames = species.frameFiles?.map((f, idx) => {
+          const filename = f.split('/').pop();
+          const isStarred = starredFilenames.has(filename);
+          // Extract timestamp from filename
+          const tsMatch = filename.match(/_(\d+)s\.jpg$/);
+          const ts = tsMatch ? parseInt(tsMatch[1], 10) : 0;
+          const rot = getRotation(filename);
+          const rotStyle = rot ? `transform: rotate(${rot}deg);` : '';
+          return `
+            <div style="position: relative; display: inline-block;">
+              <button class="star-btn ${isStarred ? 'starred' : ''}"
+                      onclick="event.stopPropagation(); toggleStar('${filename}', '${species.commonName.replace(/'/g, "\\'")}', '${videoName.replace(/'/g, "\\'")}', ${ts}, this)">
+                ${isStarred ? '★' : '☆'}
+              </button>
+              <img src="/frames/${filename}" class="frame-thumb" style="${rotStyle}"
+                   onclick="openLightbox('/frames/${filename}', window['${framesKey}'], ${idx}, '${species.commonName.replace(/'/g, "\\'")}')"
+                   onerror="this.parentElement.style.display='none'"
+                   alt="Frame">
+            </div>`;
+        }).join('') || '';
+
+        const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(species.scientificName.replace(/ /g, '_'))}`;
+
+        return `
+          <div class="species-card" style="border-left-color: ${SPECIES_COLORS[i % SPECIES_COLORS.length]}">
+            <div class="species-card-header">
+              <div>
+                <a href="${wikiUrl}" target="_blank" class="species-name" style="color: inherit; text-decoration: none;">
+                  ${species.commonName}
+                  <span style="font-size: 0.75rem; opacity: 0.6;">↗</span>
+                </a>
+                <div class="species-scientific">${species.scientificName}</div>
+              </div>
+              <span class="confidence-badge ${confidenceClass}">
+                ${Math.round(species.confidence * 100)}%
+              </span>
+            </div>
+            <div class="species-details">
+              <p><strong>Habitat:</strong> ${species.habitat}</p>
+              <p><strong>Appears:</strong> ${timestamps}</p>
+              <p>${species.description}</p>
+            </div>
+            ${frames ? `<div class="frame-gallery">${frames}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      // Summary
+      document.getElementById('summaryText').textContent = result.summary;
+    }
+
+    // Render timeline
+    function renderTimeline(result) {
+      const container = document.getElementById('timelineContainer');
+      const legend = document.getElementById('timelineLegend');
+      const duration = result.duration;
+
+      document.getElementById('durationText').textContent =
+        `Duration: ${formatTime(duration)}`;
+
+      container.innerHTML = '';
+      legend.innerHTML = '';
+
+      result.identifiedSpecies.forEach((species, i) => {
+        const color = SPECIES_COLORS[i % SPECIES_COLORS.length];
+        const row = i % 3; // Stack up to 3 rows
+
+        species.timestamps.forEach(t => {
+          const left = (t.start / duration) * 100;
+          const width = ((t.end - t.start) / duration) * 100;
+
+          const track = document.createElement('div');
+          track.className = 'timeline-track';
+          track.style.left = `${left}%`;
+          track.style.width = `${Math.max(width, 2)}%`;
+          track.style.top = `${10 + row * 24}px`;
+          track.style.background = color;
+          track.textContent = species.commonName;
+          track.title = `${species.commonName}: ${formatTime(t.start)}-${formatTime(t.end)}`;
+
+          container.appendChild(track);
+        });
+
+        // Legend
+        legend.innerHTML += `
+          <div class="legend-item">
+            <span class="legend-color" style="background: ${color}"></span>
+            <span>${species.commonName}</span>
+          </div>
+        `;
+      });
+    }
+
+    // Format seconds to m:ss
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Show error
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.add('visible');
+    }
+
+    // Lightbox with navigation
+    let lightboxFrames = [];
+    let lightboxIndex = 0;
+    let lightboxTitle = '';
+
+    function openLightbox(src, frames = null, index = 0, title = '') {
+      if (frames) {
+        lightboxFrames = frames;
+        lightboxIndex = index;
+      } else {
+        lightboxFrames = [src];
+        lightboxIndex = 0;
+      }
+      lightboxTitle = title;
+      const img = document.getElementById('lightboxImg');
+      const container = document.getElementById('lightboxImageContainer');
+      img.src = src;
+      const filename = src.split('/').pop();
+      // Apply rotation to container so boxes rotate with image
+      const deg = getRotation(filename);
+      container.style.transform = deg ? `rotate(${deg}deg)` : '';
+      img.style.transform = ''; // Clear any rotation on image itself
+      document.getElementById('lightboxHeader').textContent = title;
+      document.getElementById('lightbox').classList.add('visible');
+      // Reset bounding box visibility (show by default)
+      container.classList.remove('boxes-hidden');
+      updateLightboxNav();
+      renderBoundingBoxes(filename);
+      updateDetectButtonState(filename);
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('visible');
+      lightboxFrames = [];
+      lightboxIndex = 0;
+      // Clear bounding boxes and rotation
+      const container = document.getElementById('lightboxImageContainer');
+      container.querySelectorAll('.bounding-box').forEach(el => el.remove());
+      container.style.transform = '';
+    }
+
+    function openLightboxStarred(idx) {
+      const title = window.currentStarredTitles ? window.currentStarredTitles[idx] : '';
+      openLightbox(window.currentStarredFrames[idx], window.currentStarredFrames, idx, title);
+    }
+
+    function lightboxPrev() {
+      if (lightboxFrames.length > 1 && lightboxIndex > 0) {
+        lightboxIndex--;
+        // Reset visibility for new frame
+        document.getElementById('lightboxImageContainer').classList.remove('boxes-hidden');
+        updateLightboxImage();
+        updateLightboxNav();
+      }
+    }
+
+    function lightboxNext() {
+      if (lightboxFrames.length > 1 && lightboxIndex < lightboxFrames.length - 1) {
+        lightboxIndex++;
+        // Reset visibility for new frame
+        document.getElementById('lightboxImageContainer').classList.remove('boxes-hidden');
+        updateLightboxImage();
+        updateLightboxNav();
+      }
+    }
+
+    function updateLightboxNav() {
+      const counter = document.getElementById('lightboxCounter');
+      const prevBtn = document.getElementById('lightboxPrev');
+      const nextBtn = document.getElementById('lightboxNext');
+
+      if (lightboxFrames.length > 1) {
+        counter.textContent = `${lightboxIndex + 1} / ${lightboxFrames.length}`;
+        counter.style.display = 'block';
+        prevBtn.style.display = lightboxIndex > 0 ? 'block' : 'none';
+        nextBtn.style.display = lightboxIndex < lightboxFrames.length - 1 ? 'block' : 'none';
+      } else {
+        counter.style.display = 'none';
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+      }
+
+      // Update star button state
+      updateLightboxStarState();
+    }
+
+    function updateLightboxStarState() {
+      const currentSrc = lightboxFrames[lightboxIndex];
+      if (!currentSrc) return;
+      const filename = currentSrc.split('/').pop();
+      const starBtn = document.getElementById('lightboxStar');
+      const isStarred = starredFilenames.has(filename);
+      starBtn.textContent = isStarred ? '★' : '☆';
+      starBtn.classList.toggle('starred', isStarred);
+    }
+
+    async function toggleLightboxStar() {
+      const currentSrc = lightboxFrames[lightboxIndex];
+      if (!currentSrc) return;
+
+      const filename = currentSrc.split('/').pop();
+      const speciesName = lightboxTitle || '';
+
+      // Extract video name and timestamp from filename if possible
+      const tsMatch = filename.match(/_(\d+)s\.jpg$/);
+      const timestamp = tsMatch ? parseInt(tsMatch[1], 10) : 0;
+      const videoMatch = filename.match(/^([^_]+)/);
+      const videoName = videoMatch ? videoMatch[1] + '.MP4' : '';
+
+      try {
+        const res = await fetch('/api/starred', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, speciesName, videoName, timestamp }),
+        });
+        const data = await res.json();
+
+        if (data.starred) {
+          starredFilenames.add(filename);
+        } else {
+          starredFilenames.delete(filename);
+        }
+
+        updateLightboxStarState();
+        refreshAllStarButtons();
+        await loadStarredFrames();
+      } catch (err) {
+        console.error('Failed to toggle star:', err);
+      }
+    }
+
+    // Refresh all star buttons across all views to match starredFilenames
+    function refreshAllStarButtons() {
+      // Update gallery modal star buttons
+      document.querySelectorAll('.gallery-item .star-btn').forEach(btn => {
+        const img = btn.parentElement.querySelector('img');
+        if (img) {
+          const filename = img.src.split('/').pop();
+          const isStarred = starredFilenames.has(filename);
+          btn.classList.toggle('starred', isStarred);
+          btn.textContent = isStarred ? '★' : '☆';
+        }
+      });
+
+      // Update species card star buttons
+      document.querySelectorAll('.frame-gallery .star-btn').forEach(btn => {
+        const img = btn.parentElement.querySelector('img');
+        if (img) {
+          const filename = img.src.split('/').pop();
+          const isStarred = starredFilenames.has(filename);
+          btn.classList.toggle('starred', isStarred);
+          btn.textContent = isStarred ? '★' : '☆';
+        }
+      });
+    }
+
+    async function rotateCurrentFrame() {
+      const currentSrc = lightboxFrames[lightboxIndex];
+      if (!currentSrc) return;
+
+      const filename = currentSrc.split('/').pop();
+      const currentRotation = getRotation(filename);
+      const newRotation = (currentRotation + 90) % 360;
+
+      try {
+        await fetch('/api/rotations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, degrees: newRotation }),
+        });
+
+        frameRotations[filename] = newRotation;
+        // Apply rotation to container so boxes rotate with image
+        const container = document.getElementById('lightboxImageContainer');
+        container.style.transform = newRotation ? `rotate(${newRotation}deg)` : '';
+        refreshAllThumbnailRotations(filename);
+      } catch (err) {
+        console.error('Failed to rotate:', err);
+      }
+    }
+
+    // Refresh thumbnail rotations across all views for a specific filename
+    function refreshAllThumbnailRotations(filename) {
+      const deg = getRotation(filename);
+
+      // Find all img elements that match this filename
+      document.querySelectorAll(`img[src$="${filename}"]`).forEach(img => {
+        img.style.transform = deg ? `rotate(${deg}deg)` : '';
+      });
+    }
+
+    function updateLightboxImage() {
+      const currentSrc = lightboxFrames[lightboxIndex];
+      const img = document.getElementById('lightboxImg');
+      const container = document.getElementById('lightboxImageContainer');
+      img.src = currentSrc;
+      const filename = currentSrc.split('/').pop();
+      // Apply rotation to container so boxes rotate with image
+      const deg = getRotation(filename);
+      container.style.transform = deg ? `rotate(${deg}deg)` : '';
+      img.style.transform = '';
+      renderBoundingBoxes(filename);
+      updateDetectButtonState(filename);
+    }
+
+    // Render bounding boxes on the lightbox image
+    function renderBoundingBoxes(filename) {
+      const container = document.getElementById('lightboxImageContainer');
+      const img = document.getElementById('lightboxImg');
+
+      // Remove existing boxes
+      container.querySelectorAll('.bounding-box').forEach(el => el.remove());
+
+      const allBoxes = frameBoundingBoxes[filename] || [];
+      // Filter to only show boxes with >= 90% confidence
+      const boxes = allBoxes.filter(box => !box.confidence || box.confidence >= 0.9);
+      if (boxes.length === 0) {
+        // Clear any pending onload handler to prevent stale boxes from appearing
+        img.onload = null;
+        return;
+      }
+
+      // Get rotation to counter-rotate labels so they stay readable
+      const rotation = getRotation(filename);
+
+      // Render boxes positioned relative to image
+      const render = () => {
+        // Clear any boxes again in case of race condition
+        container.querySelectorAll('.bounding-box').forEach(el => el.remove());
+
+        // Use the image's rendered dimensions (works correctly with rotation on container)
+        const imgWidth = img.offsetWidth;
+        const imgHeight = img.offsetHeight;
+
+        boxes.forEach(box => {
+          const div = document.createElement('div');
+          div.className = 'bounding-box';
+          div.style.left = `${box.xmin * imgWidth}px`;
+          div.style.top = `${box.ymin * imgHeight}px`;
+          div.style.width = `${(box.xmax - box.xmin) * imgWidth}px`;
+          div.style.height = `${(box.ymax - box.ymin) * imgHeight}px`;
+
+          // Add combined label with confidence (counter-rotate to keep readable)
+          if (box.label || box.confidence !== undefined) {
+            const label = document.createElement('span');
+            label.className = 'bounding-box-label';
+            const name = box.label || '';
+            const conf = box.confidence !== undefined ? ` ${Math.round(box.confidence * 100)}%` : '';
+            label.textContent = name + conf;
+            if (rotation) {
+              label.style.transform = `rotate(${-rotation}deg)`;
+            }
+            div.appendChild(label);
+          }
+
+          container.appendChild(div);
+        });
+      };
+
+      // Always wait for image load event to ensure correct dimensions
+      if (img.complete && img.naturalWidth > 0) {
+        // Use requestAnimationFrame to ensure layout is complete
+        requestAnimationFrame(render);
+      } else {
+        img.onload = () => requestAnimationFrame(render);
+      }
+    }
+
+    // Update detect button state
+    function updateDetectButtonState(filename) {
+      const btn = document.getElementById('lightboxDetect');
+      const hasBoxes = frameBoundingBoxes[filename] && frameBoundingBoxes[filename].length > 0;
+      btn.classList.toggle('has-boxes', hasBoxes);
+      btn.textContent = hasBoxes ? '✓' : '📍';
+    }
+
+    // Toggle bounding box visibility on click
+    function toggleBoundingBoxVisibility() {
+      const container = document.getElementById('lightboxImageContainer');
+      container.classList.toggle('boxes-hidden');
+    }
+
+    // Detect bounding boxes for current frame
+    async function detectCurrentBoundingBoxes() {
+      const currentSrc = lightboxFrames[lightboxIndex];
+      if (!currentSrc) return;
+
+      const filename = currentSrc.split('/').pop();
+      const btn = document.getElementById('lightboxDetect');
+
+      btn.textContent = '⏳';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/bounding-boxes/detect/${encodeURIComponent(filename)}`, {
+          method: 'POST',
+        });
+        const data = await res.json();
+
+        if (data.error) throw new Error(data.error);
+
+        frameBoundingBoxes[filename] = data.boxes;
+        renderBoundingBoxes(filename);
+        updateDetectButtonState(filename);
+      } catch (err) {
+        console.error('Failed to detect bounding boxes:', err);
+        btn.textContent = '❌';
+        setTimeout(() => updateDetectButtonState(filename), 1500);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteCurrentFrame() {
+      if (!lightboxFrames.length) return;
+
+      const currentSrc = lightboxFrames[lightboxIndex];
+      const filename = currentSrc.split('/').pop();
+
+      if (!confirm(`Delete frame ${filename}?`)) return;
+
+      try {
+        const res = await fetch(`/api/frames/${filename}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete');
+
+        // Remove from current array
+        lightboxFrames.splice(lightboxIndex, 1);
+
+        if (lightboxFrames.length === 0) {
+          closeLightbox();
+        } else {
+          // Adjust index if needed
+          if (lightboxIndex >= lightboxFrames.length) {
+            lightboxIndex = lightboxFrames.length - 1;
+          }
+          document.getElementById('lightboxImg').src = lightboxFrames[lightboxIndex];
+          updateLightboxNav();
+        }
+
+        // Refresh views
+        await loadStarredFrames();
+        await loadAggregatedSpecies();
+      } catch (err) {
+        alert('Failed to delete frame');
+      }
+    }
+
+    // Gallery modal for species frames
+    async function showSpeciesFrames(speciesName) {
+      try {
+        const res = await fetch(`/api/history/species/${encodeURIComponent(speciesName)}/frames`);
+        const data = await res.json();
+
+        if (data.frames.length === 0) {
+          showError(`No frames found for ${speciesName}`);
+          return;
+        }
+
+        document.getElementById('galleryTitle').textContent = `${speciesName} (${data.frames.length} frames)`;
+
+        // Store frames for navigation
+        const frameUrls = data.frames.map(f => f.url);
+        window.currentGalleryFrames = frameUrls;
+
+        const grid = document.getElementById('galleryGrid');
+        grid.innerHTML = data.frames.map((f, idx) => {
+          const filename = f.url.split('/').pop();
+          const isStarred = starredFilenames.has(filename);
+          const rot = getRotation(filename);
+          const rotStyle = rot ? `style="transform: rotate(${rot}deg)"` : '';
+          return `
+            <div class="gallery-item">
+              <button class="star-btn ${isStarred ? 'starred' : ''}"
+                      onclick="event.stopPropagation(); toggleStar('${filename}', '${speciesName.replace(/'/g, "\\'")}', '${f.videoName.replace(/'/g, "\\'")}', ${f.timestamp}, this)">
+                ${isStarred ? '★' : '☆'}
+              </button>
+              <img src="${f.url}" alt="${speciesName}" ${rotStyle} onclick="openLightbox('${f.url}', window.currentGalleryFrames, ${idx}, '${speciesName.replace(/'/g, "\\'")}')" onerror="this.parentElement.style.display='none'">
+              <div class="gallery-item-label">${f.videoName} @ ${formatTime(f.timestamp)}</div>
+            </div>
+          `;
+        }).join('');
+
+        document.getElementById('galleryModal').classList.add('visible');
+      } catch (err) {
+        showError(`Failed to load frames for ${speciesName}`);
+      }
+    }
+
+    function closeGallery() {
+      document.getElementById('galleryModal').classList.remove('visible');
+    }
+
+    // Check if video already analyzed
+    let existingAnalysisId = null;
+
+    async function checkVideoAnalyzed(path) {
+      try {
+        const res = await fetch(`/api/history/video?path=${encodeURIComponent(path)}`);
+        const data = await res.json();
+
+        const banner = document.getElementById('alreadyAnalyzed');
+        if (data.exists) {
+          existingAnalysisId = data.analysis.id;
+          banner.classList.add('visible');
+        } else {
+          existingAnalysisId = null;
+          banner.classList.remove('visible');
+        }
+      } catch (err) {
+        console.error('Failed to check video:', err);
+      }
+    }
+
+    function loadExistingAnalysis() {
+      if (existingAnalysisId) {
+        loadAnalysis(existingAnalysisId);
+        document.getElementById('alreadyAnalyzed').classList.remove('visible');
+      }
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        // Close lightbox first, only close gallery if lightbox isn't open
+        if (document.getElementById('lightbox').classList.contains('visible')) {
+          closeLightbox();
+        } else if (document.getElementById('galleryModal').classList.contains('visible')) {
+          closeGallery();
+        }
+      } else if (e.key === 'ArrowLeft') {
+        lightboxPrev();
+      } else if (e.key === 'ArrowRight') {
+        lightboxNext();
+      }
+    });
+
+    // Clear history
+    clearHistoryBtn.addEventListener('click', async () => {
+      if (confirm('Are you sure you want to clear all history?')) {
+        try {
+          await fetch('/api/history', { method: 'DELETE' });
+          await loadHistory();
+          await loadAggregatedSpecies();
+          resultsSection.classList.remove('visible');
+          timelineSection.classList.remove('visible');
+        } catch (err) {
+          showError('Failed to clear history');
+        }
+      }
+    });
+
+    // ============ BATCH ANALYSIS ============
+
+    let batchVideos = [];
+    let currentBatchId = null;
+    let batchEventSource = null;
+    let analyzedVideoPaths = new Set();
+
+    // Show batch section when directory path is entered
+    videoPathInput.addEventListener('input', () => {
+      const path = videoPathInput.value.trim();
+      // Show batch section if path looks like a directory (ends with / or doesn't have video extension)
+      const isDirectory = path.endsWith('/') || !path.match(/\.(mp4|mov|avi|mkv|webm)$/i);
+      document.getElementById('batchSection').classList.toggle('visible', isDirectory && path.length > 0);
+    });
+
+    // Initialize batch section visibility
+    const initialPath = videoPathInput.value.trim();
+    if (initialPath.endsWith('/') || !initialPath.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
+      document.getElementById('batchSection').classList.add('visible');
+    }
+
+    async function loadVideosForBatch() {
+      const dir = videoPathInput.value.trim();
+      if (!dir) {
+        showError('Enter a directory path first');
+        return;
+      }
+
+      try {
+        // Get list of videos
+        const res = await fetch(`/api/videos?dir=${encodeURIComponent(dir)}`);
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        batchVideos = data.videos || [];
+
+        if (batchVideos.length === 0) {
+          document.getElementById('videoChecklist').innerHTML = `
+            <div style="padding: 1rem; text-align: center; color: var(--text-secondary);">
+              No videos found in directory
+            </div>
+          `;
+          return;
+        }
+
+        // Get history to check which videos are already analyzed
+        const historyRes = await fetch('/api/history');
+        const historyData = await historyRes.json();
+        analyzedVideoPaths = new Set(historyData.analyses.map(a => a.video));
+
+        // Render checklist
+        renderVideoChecklist();
+        updateBatchSelectedCount();
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    function renderVideoChecklist() {
+      const checklist = document.getElementById('videoChecklist');
+      checklist.innerHTML = batchVideos.map((v, idx) => {
+        const isAnalyzed = analyzedVideoPaths.has(v.path);
+        return `
+          <div class="video-checkbox-item ${isAnalyzed ? 'analyzed' : ''}">
+            <input type="checkbox" id="video_${idx}" value="${v.path}" onchange="updateBatchSelectedCount()">
+            <label for="video_${idx}" title="${v.path}">${v.name}</label>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function getSelectedVideos() {
+      const checkboxes = document.querySelectorAll('#videoChecklist input[type="checkbox"]:checked');
+      return Array.from(checkboxes).map(cb => cb.value);
+    }
+
+    function updateBatchSelectedCount() {
+      const selected = getSelectedVideos();
+      document.getElementById('batchSelectedCount').textContent = `${selected.length} selected`;
+      document.getElementById('startBatchBtn').disabled = selected.length === 0;
+    }
+
+    function selectAllVideos() {
+      document.querySelectorAll('#videoChecklist input[type="checkbox"]').forEach(cb => {
+        cb.checked = true;
+      });
+      updateBatchSelectedCount();
+    }
+
+    function selectNoneVideos() {
+      document.querySelectorAll('#videoChecklist input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+      });
+      updateBatchSelectedCount();
+    }
+
+    async function startBatchAnalysis() {
+      const selectedVideos = getSelectedVideos();
+      if (selectedVideos.length === 0) return;
+
+      try {
+        const res = await fetch('/api/batch/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            videos: selectedVideos,
+            model: modelSelect.value,
+            fps: parseInt(fpsSelect.value),
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        currentBatchId = data.batchId;
+
+        // Show batch progress section, hide batch selection
+        document.getElementById('batchSection').classList.remove('visible');
+        document.getElementById('batchProgressSection').classList.add('visible');
+
+        // Initialize batch video list
+        initBatchVideoList(selectedVideos);
+
+        // Listen to batch progress
+        listenToBatchProgress(data.batchId);
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    function initBatchVideoList(videos) {
+      const list = document.getElementById('batchVideoList');
+      list.innerHTML = videos.map(path => {
+        const name = path.split('/').pop();
+        return `
+          <div class="batch-video-item pending" data-path="${path}">
+            <span class="batch-video-status"></span>
+            <span class="batch-video-name" title="${path}">${name}</span>
+            <span class="batch-video-progress"></span>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('batchOverallFill').style.width = '0%';
+      document.getElementById('batchOverallText').textContent = `0 / ${videos.length} videos`;
+    }
+
+    function listenToBatchProgress(batchId) {
+      batchEventSource = new EventSource(`/api/batch/${batchId}/progress`);
+
+      batchEventSource.addEventListener('video_start', (e) => {
+        const data = JSON.parse(e.data);
+        updateBatchVideoStatus(data.path, 'processing', '');
+      });
+
+      batchEventSource.addEventListener('video_progress', (e) => {
+        const data = JSON.parse(e.data);
+        updateBatchVideoStatus(data.path, 'processing', `${data.percent}% - ${data.message}`);
+      });
+
+      batchEventSource.addEventListener('batch_progress', (e) => {
+        const data = JSON.parse(e.data);
+        const percent = ((data.completed + data.failed) / data.total) * 100;
+        document.getElementById('batchOverallFill').style.width = `${percent}%`;
+        document.getElementById('batchOverallText').textContent =
+          `${data.completed + data.failed} / ${data.total} videos (${data.completed} done, ${data.failed} failed)`;
+      });
+
+      batchEventSource.addEventListener('video_complete', async (e) => {
+        const data = JSON.parse(e.data);
+        const speciesCount = data.result?.identifiedSpecies?.length || 0;
+        updateBatchVideoStatus(data.path, 'completed', `${speciesCount} species`);
+
+        // Update sidebar and show results as each video completes
+        await loadHistory();
+        await loadAggregatedSpecies();
+
+        // Display the results of this completed video
+        if (data.result) {
+          currentResult = data.result;
+          displayResults(data.result);
+        }
+      });
+
+      batchEventSource.addEventListener('video_error', (e) => {
+        const data = JSON.parse(e.data);
+        updateBatchVideoStatus(data.path, 'failed', data.error);
+      });
+
+      batchEventSource.addEventListener('batch_complete', async (e) => {
+        batchEventSource.close();
+        batchEventSource = null;
+        currentBatchId = null;
+
+        const data = JSON.parse(e.data);
+        document.getElementById('batchOverallFill').style.width = '100%';
+        document.getElementById('batchOverallText').textContent =
+          `Complete! ${data.completed.length} succeeded, ${data.failed.length} failed`;
+
+        // Refresh history and species
+        await loadHistory();
+        await loadAggregatedSpecies();
+
+        // After a delay, hide progress and show batch section again
+        setTimeout(() => {
+          document.getElementById('batchProgressSection').classList.remove('visible');
+          document.getElementById('batchSection').classList.add('visible');
+          loadVideosForBatch(); // Refresh to show newly analyzed status
+        }, 2000);
+      });
+
+      batchEventSource.addEventListener('batch_cancelled', async (e) => {
+        batchEventSource.close();
+        batchEventSource = null;
+        currentBatchId = null;
+
+        const data = JSON.parse(e.data);
+        document.getElementById('batchOverallText').textContent =
+          `Cancelled. ${data.completed.length} completed, ${data.remaining} skipped`;
+
+        await loadHistory();
+        await loadAggregatedSpecies();
+
+        setTimeout(() => {
+          document.getElementById('batchProgressSection').classList.remove('visible');
+          document.getElementById('batchSection').classList.add('visible');
+          loadVideosForBatch();
+        }, 2000);
+      });
+
+      batchEventSource.onerror = () => {
+        batchEventSource.close();
+        batchEventSource = null;
+        showError('Lost connection to batch progress');
+      };
+    }
+
+    function updateBatchVideoStatus(path, status, progressText) {
+      const item = document.querySelector(`.batch-video-item[data-path="${path}"]`);
+      if (item) {
+        item.className = `batch-video-item ${status}`;
+        item.querySelector('.batch-video-progress').textContent = progressText;
+
+        // Auto-scroll to keep current item visible
+        if (status === 'processing') {
+          item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+    }
+
+    async function cancelBatchAnalysis() {
+      if (!currentBatchId) return;
+
+      if (!confirm('Cancel batch analysis? Current video will finish, remaining will be skipped.')) {
+        return;
+      }
+
+      try {
+        await fetch(`/api/batch/${currentBatchId}`, { method: 'DELETE' });
+      } catch (err) {
+        console.error('Failed to cancel batch:', err);
+      }
+    }
+
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>
